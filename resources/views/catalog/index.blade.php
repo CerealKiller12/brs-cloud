@@ -92,7 +92,7 @@
     data-cloud-catalog-live
     data-catalog-version="{{ (int) $store->catalog_version }}"
     data-store-id="{{ (int) $store->id }}"
-    data-status-url="{{ route('catalog.status', ['store_id' => $store->id]) }}">
+    data-events-url="{{ route('catalog.events', ['store_id' => $store->id]) }}">
     <div class="toolbar">
         <div>
             <small class="eyebrow">Inventario cloud</small>
@@ -171,9 +171,9 @@
     }
 
     let currentVersion = Number(root.dataset.catalogVersion || '0');
-    const statusUrl = root.dataset.statusUrl || '';
+    const eventsUrl = root.dataset.eventsUrl || '';
     const liveStatus = root.querySelector('[data-live-status]');
-    let polling = false;
+    let source = null;
 
     const setStatus = (text) => {
         if (liveStatus) {
@@ -181,29 +181,21 @@
         }
     };
 
-    const checkCatalogVersion = async () => {
-        if (polling || !statusUrl || document.visibilityState === 'hidden') {
+    const connect = () => {
+        if (!eventsUrl || typeof EventSource === 'undefined') {
+            setStatus('Actualizacion automatica no disponible en este navegador.');
             return;
         }
 
-        polling = true;
+        if (source) {
+            source.close();
+        }
 
-        try {
-            const response = await fetch(statusUrl, {
-                credentials: 'same-origin',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
-                cache: 'no-store',
-            });
+        source = new EventSource(eventsUrl, { withCredentials: true });
+        setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
 
-            if (!response.ok) {
-                setStatus('No pude revisar cambios del snapshot cloud.');
-                return;
-            }
-
-            const payload = await response.json();
+        source.addEventListener('catalog.version', (event) => {
+            const payload = JSON.parse(event.data || '{}');
             const nextVersion = Number(payload.catalogVersion || 0);
 
             if (nextVersion > currentVersion) {
@@ -212,27 +204,32 @@
                 return;
             }
 
+            currentVersion = nextVersion;
             setStatus(`Snapshot al dia en v${currentVersion}.`);
-        } catch {
-            setStatus('No pude revisar cambios del snapshot cloud.');
-        } finally {
-            polling = false;
-        }
-    };
+        });
 
-    window.setInterval(() => {
-        void checkCatalogVersion();
-    }, 10000);
+        source.addEventListener('heartbeat', (event) => {
+            const payload = JSON.parse(event.data || '{}');
+            currentVersion = Number(payload.catalogVersion || currentVersion);
+            setStatus(`Snapshot al dia en v${currentVersion}.`);
+        });
+
+        source.onerror = () => {
+            setStatus('Esperando reconexion del snapshot cloud...');
+        };
+    };
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            void checkCatalogVersion();
+            connect();
         }
     });
 
     window.addEventListener('focus', () => {
-        void checkCatalogVersion();
+        connect();
     });
+
+    connect();
 })();
 </script>
 @endsection

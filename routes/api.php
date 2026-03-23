@@ -21,6 +21,72 @@ $supportedPlatforms = [
     'android',
 ];
 
+$streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $initialCatalogVersion) {
+    return response()->stream(function () use ($storeId, $storeCode, $initialCatalogVersion) {
+        ignore_user_abort(true);
+        @set_time_limit(0);
+
+        $sendEvent = function (string $event, array $payload): void {
+            echo "event: {$event}\n";
+            echo 'data: '.json_encode($payload, JSON_UNESCAPED_SLASHES)."\n\n";
+
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+
+            @flush();
+        };
+
+        $lastVersion = max(0, $initialCatalogVersion);
+        $startedAt = time();
+        $lastHeartbeatAt = 0;
+
+        $sendEvent('catalog.version', [
+            'storeId' => $storeId,
+            'storeCode' => $storeCode,
+            'catalogVersion' => $lastVersion,
+            'emittedAt' => now()->toIso8601String(),
+        ]);
+
+        while (!connection_aborted() && (time() - $startedAt) < 30) {
+            usleep(2000000);
+
+            $currentVersion = (int) DB::table('stores')
+                ->where('id', $storeId)
+                ->value('catalog_version');
+
+            if ($currentVersion > $lastVersion) {
+                $lastVersion = $currentVersion;
+
+                $sendEvent('catalog.version', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+
+                continue;
+            }
+
+            if ((time() - $lastHeartbeatAt) >= 10) {
+                $lastHeartbeatAt = time();
+
+                $sendEvent('heartbeat', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+            }
+        }
+    }, 200, [
+        'Content-Type' => 'text/event-stream',
+        'Cache-Control' => 'no-cache, no-transform',
+        'Connection' => 'keep-alive',
+        'X-Accel-Buffering' => 'no',
+    ]);
+};
+
 Route::get('/health', function () {
     return response()->json([
         'ok' => true,
@@ -520,6 +586,16 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
             'deletedAt' => $delete->deleted_at,
         ])->values(),
     ]);
+})->middleware('auth:sanctum');
+
+Route::get('/cloud/events/stream', function (Request $request) use ($resolveStoreContext, $streamCatalogVersionEvents) {
+    $store = $resolveStoreContext($request);
+
+    return $streamCatalogVersionEvents(
+        (int) $store->store_row_id,
+        (string) $store->store_code,
+        (int) $store->catalog_version,
+    );
 })->middleware('auth:sanctum');
 
 Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
