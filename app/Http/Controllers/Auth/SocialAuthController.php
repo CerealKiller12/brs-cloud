@@ -7,70 +7,130 @@ use App\Models\Store;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
+use Throwable;
 
 class SocialAuthController extends Controller
 {
     private const SUPPORTED = ['google', 'apple'];
 
-    public function redirect(string $provider): SymfonyRedirectResponse
+    public function redirect(Request $request, string $provider): SymfonyRedirectResponse
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
+
+        $returnTo = trim((string) $request->query('return_to', ''));
+
+        if ($this->isAllowedAppReturnTo($returnTo)) {
+            $request->session()->put('social_return_to', $returnTo);
+        } else {
+            $request->session()->forget('social_return_to');
+        }
 
         return Socialite::driver($provider)->redirect();
     }
 
-    public function callback(string $provider): RedirectResponse
+    public function callback(Request $request, string $provider): RedirectResponse
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $socialUser = Socialite::driver($provider)->user();
-        $email = $socialUser->getEmail();
-        $providerIdField = $provider === 'google' ? 'google_id' : 'apple_id';
+        $returnTo = $request->session()->pull('social_return_to');
 
-        $user = User::query()
-            ->when($socialUser->getId(), fn ($query) => $query->orWhere($providerIdField, $socialUser->getId()))
-            ->when($email, fn ($query) => $query->orWhere('email', $email))
-            ->first();
+        try {
+            $socialUser = Socialite::driver($provider)->user();
+            $email = $socialUser->getEmail();
+            $providerIdField = $provider === 'google' ? 'google_id' : 'apple_id';
 
-        if (! $user) {
-            abort_if(! $email, 422, 'Apple no devolvio correo. Vuelve a intentar y comparte tu email con la app la primera vez.');
-            $user = $this->provisionOwnerFromSocialUser(
-                $provider,
-                $socialUser->getId(),
-                $email,
-                $socialUser->getName(),
-                $socialUser->getAvatar(),
-            );
-        } else {
-            abort_unless($user->is_active, 403, 'Tu acceso cloud esta inactivo.');
+            $user = User::query()
+                ->when($socialUser->getId(), fn ($query) => $query->orWhere($providerIdField, $socialUser->getId()))
+                ->when($email, fn ($query) => $query->orWhere('email', $email))
+                ->first();
 
-            $updates = [
-                'email_verified_at' => $user->email_verified_at ?: now(),
-                'avatar_url' => $socialUser->getAvatar() ?: $user->avatar_url,
-            ];
+            if (! $user) {
+                abort_if(! $email, 422, 'Apple no devolvio correo. Vuelve a intentar y comparte tu email con la app la primera vez.');
+                $user = $this->provisionOwnerFromSocialUser(
+                    $provider,
+                    $socialUser->getId(),
+                    $email,
+                    $socialUser->getName(),
+                    $socialUser->getAvatar(),
+                );
+            } else {
+                abort_unless($user->is_active, 403, 'Tu acceso cloud esta inactivo.');
 
-            if (! $user->{$providerIdField}) {
-                $updates[$providerIdField] = $socialUser->getId();
+                $updates = [
+                    'email_verified_at' => $user->email_verified_at ?: now(),
+                    'avatar_url' => $socialUser->getAvatar() ?: $user->avatar_url,
+                ];
+
+                if (! $user->{$providerIdField}) {
+                    $updates[$providerIdField] = $socialUser->getId();
+                }
+
+                if (! $user->name && $socialUser->getName()) {
+                    $updates['name'] = $socialUser->getName();
+                }
+
+                $user->fill($updates)->save();
             }
 
-            if (! $user->name && $socialUser->getName()) {
-                $updates['name'] = $socialUser->getName();
+            Auth::login($user, true);
+            $request->session()->regenerate();
+
+            if ($this->isAllowedAppReturnTo($returnTo)) {
+                $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
+
+                return $this->redirectBackToApp($returnTo, [
+                    'cloud_token' => $token,
+                    'cloud_provider' => $provider,
+                ]);
             }
 
-            $user->fill($updates)->save();
+            return $user->tenant?->onboarding_completed_at
+                ? redirect()->route('dashboard')
+                : redirect()->route('onboarding.index');
+        } catch (Throwable $exception) {
+            if ($this->isAllowedAppReturnTo($returnTo)) {
+                return $this->redirectBackToApp($returnTo, [
+                    'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de BRS Cloud.',
+                ]);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function isAllowedAppReturnTo(?string $returnTo): bool
+    {
+        if (! is_string($returnTo) || $returnTo === '') {
+            return false;
         }
 
-        Auth::login($user, true);
-        request()->session()->regenerate();
+        $parts = parse_url($returnTo);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
 
-        return $user->tenant?->onboarding_completed_at
-            ? redirect()->route('dashboard')
-            : redirect()->route('onboarding.index');
+        if ($scheme === 'capacitor') {
+            return $host === 'localhost';
+        }
+
+        if (in_array($scheme, ['http', 'https'], true)) {
+            return in_array($host, ['localhost', '127.0.0.1'], true);
+        }
+
+        return false;
+    }
+
+    private function redirectBackToApp(string $returnTo, array $params): RedirectResponse
+    {
+        $filtered = array_filter($params, fn ($value) => $value !== null && $value !== '');
+        $separator = str_contains($returnTo, '?') ? '&' : '?';
+
+        return redirect()->away($returnTo.$separator.http_build_query($filtered));
     }
 
     private function provisionOwnerFromSocialUser(

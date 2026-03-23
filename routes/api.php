@@ -214,6 +214,8 @@ Route::post('/auth/login', function (Request $request) {
 
 Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) {
     $user = $request->user();
+    $tenant = $user instanceof User && $user->tenant_id ? DB::table('tenants')->where('id', $user->tenant_id)->first() : null;
+    $store = $user instanceof User && $user->store_id ? DB::table('stores')->where('id', $user->store_id)->first() : null;
 
     return response()->json([
         'id' => $user->id,
@@ -222,6 +224,18 @@ Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) {
         'role' => $user->role,
         'tenantId' => $user->tenant_id,
         'storeId' => $user->store_id,
+        'tenant' => $tenant ? [
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'slug' => $tenant->slug,
+            'planCode' => $tenant->plan_code,
+            'subscriptionStatus' => $tenant->subscription_status,
+        ] : null,
+        'store' => $store ? [
+            'id' => $store->id,
+            'name' => $store->name,
+            'code' => $store->code,
+        ] : null,
     ]);
 });
 
@@ -443,6 +457,71 @@ Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreConte
     ]);
 })->middleware('auth:sanctum');
 
+Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveStoreContext) {
+    $payload = $request->validate([
+        'since_version' => ['required', 'integer', 'min:0'],
+    ]);
+
+    $store = $resolveStoreContext($request);
+    $sinceVersion = (int) $payload['since_version'];
+
+    $products = DB::table('cloud_catalog_products')
+        ->where('store_id', $store->store_row_id)
+        ->where('is_active', true)
+        ->where('catalog_version', '>', $sinceVersion)
+        ->orderBy('catalog_version')
+        ->orderBy('id')
+        ->get([
+            'sku',
+            'barcode',
+            'name',
+            'price_cents',
+            'cost_cents',
+            'stock_on_hand',
+            'reorder_point',
+            'track_inventory',
+            'catalog_version',
+            'updated_at',
+        ]);
+
+    $deletes = DB::table('cloud_catalog_tombstones')
+        ->where('store_id', $store->store_row_id)
+        ->where('catalog_version', '>', $sinceVersion)
+        ->orderBy('catalog_version')
+        ->orderBy('id')
+        ->get([
+            'sku',
+            'barcode',
+            'catalog_version',
+            'deleted_at',
+        ]);
+
+    return response()->json([
+        'store' => [
+            'code' => $store->store_code,
+            'catalogVersion' => $store->catalog_version,
+        ],
+        'upserts' => $products->map(fn (object $product) => [
+            'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'name' => $product->name,
+            'priceCents' => $product->price_cents,
+            'costCents' => $product->cost_cents,
+            'stockOnHand' => $product->stock_on_hand,
+            'reorderPoint' => $product->reorder_point,
+            'trackInventory' => (bool) $product->track_inventory,
+            'catalogVersion' => $product->catalog_version,
+            'updatedAt' => $product->updated_at,
+        ])->values(),
+        'deletes' => $deletes->map(fn (object $delete) => [
+            'sku' => $delete->sku,
+            'barcode' => $delete->barcode,
+            'catalogVersion' => $delete->catalog_version,
+            'deletedAt' => $delete->deleted_at,
+        ])->values(),
+    ]);
+})->middleware('auth:sanctum');
+
 Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
     $payload = $request->validate([
         'device_id' => ['required', 'string', 'max:120'],
@@ -481,6 +560,25 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
         }
 
         return $query->first();
+    };
+
+    $recordCatalogTombstone = function (string|null $sku, string|null $barcode, int $catalogVersion) use ($store) {
+        $normalizedSku = $sku ? trim($sku) : null;
+        $normalizedBarcode = $barcode ? trim($barcode) : null;
+
+        if (($normalizedSku ?? '') === '' && ($normalizedBarcode ?? '') === '') {
+            return;
+        }
+
+        DB::table('cloud_catalog_tombstones')->insert([
+            'store_id' => $store->store_row_id,
+            'sku' => $normalizedSku ?: null,
+            'barcode' => $normalizedBarcode ?: null,
+            'catalog_version' => $catalogVersion,
+            'deleted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     };
 
     $accepted = [];
@@ -573,6 +671,10 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                     ];
 
                     if ($existingProduct) {
+                        if ($existingProduct->sku !== $sku || (($existingProduct->barcode ?? null) !== (($eventPayload['barcode'] ?? null) ?: null))) {
+                            $recordCatalogTombstone($existingProduct->sku, $existingProduct->barcode, $catalogVersion);
+                        }
+
                         DB::table('cloud_catalog_products')
                             ->where('id', $existingProduct->id)
                             ->update($attributes);
@@ -608,6 +710,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
 
                 if ($existingProduct) {
                     $catalogVersion = $nextCatalogVersion();
+                    $recordCatalogTombstone($existingProduct->sku, $existingProduct->barcode, $catalogVersion);
 
                     DB::table('cloud_catalog_products')
                         ->where('id', $existingProduct->id)

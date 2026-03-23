@@ -657,6 +657,18 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         $nextVersion = $bumpCatalogVersion($store->id);
 
+        if ($product->sku !== $payload['sku'] || (($product->barcode ?? null) !== ($payload['barcode'] ?: null))) {
+            DB::table('cloud_catalog_tombstones')->insert([
+                'store_id' => $store->id,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'catalog_version' => $nextVersion,
+                'deleted_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         DB::table('cloud_catalog_products')
             ->where('id', $product->id)
             ->update([
@@ -687,6 +699,18 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         $nextVersion = $bumpCatalogVersion($store->id);
 
+        if ((bool) $product->is_active) {
+            DB::table('cloud_catalog_tombstones')->insert([
+                'store_id' => $store->id,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'catalog_version' => $nextVersion,
+                'deleted_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         DB::table('cloud_catalog_products')
             ->where('id', $product->id)
             ->update([
@@ -714,7 +738,17 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->where('id', $productId)
             ->firstOrFail();
 
-        $bumpCatalogVersion($store->id);
+        $nextVersion = $bumpCatalogVersion($store->id);
+
+        DB::table('cloud_catalog_tombstones')->insert([
+            'store_id' => $store->id,
+            'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'catalog_version' => $nextVersion,
+            'deleted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         DB::table('cloud_catalog_products')
             ->where('id', $product->id)
