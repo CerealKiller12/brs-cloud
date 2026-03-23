@@ -4,34 +4,137 @@
 <section class="hero">
     <small>Stores</small>
     <h2>Sucursales del tenant</h2>
-    <p>Visualiza codigo, timezone y estado de cada store conectada al cloud.</p>
+    <p>Centraliza branding, timezone, credenciales de integracion y estado operativo por sucursal.</p>
 </section>
 
-<section class="card">
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Store</th>
-                <th>Codigo</th>
-                <th>Timezone</th>
-                <th>Catalogo</th>
-                <th>Estado</th>
-            </tr>
-        </thead>
-        <tbody>
+@if (session('status'))
+    <section class="notice success">{{ session('status') }}</section>
+@endif
+
+@if ($errors->any())
+    <section class="notice danger">{{ $errors->first() }}</section>
+@endif
+
+<section class="metrics-grid">
+    <article class="stat">
+        <div class="stat-label">Stores</div>
+        <div class="stat-value">{{ $storeStats['total'] }}</div>
+        <div class="stat-note">Sucursales registradas en este tenant</div>
+    </article>
+    <article class="stat">
+        <div class="stat-label">Activas</div>
+        <div class="stat-value">{{ $storeStats['active'] }}</div>
+        <div class="stat-note">Disponibles para check-in y sync</div>
+    </article>
+    <article class="stat">
+        <div class="stat-label">Devices</div>
+        <div class="stat-value">{{ $storeStats['devices'] }}</div>
+        <div class="stat-note">Cajas y dispositivos ligados</div>
+    </article>
+    <article class="stat">
+        <div class="stat-label">Catalogo</div>
+        <div class="stat-value">{{ $storeStats['catalogItems'] }}</div>
+        <div class="stat-note">Productos cloud across stores</div>
+    </article>
+</section>
+
+<section class="grid grid-2">
+    <article class="card">
+        <div class="toolbar">
+            <div>
+                <small class="eyebrow">Editor</small>
+                <h3>{{ $editStore ? 'Editar store' : 'Nueva store' }}</h3>
+            </div>
+            @if ($editStore)
+                <a class="pill" href="{{ route('stores.index') }}">Cancelar edicion</a>
+            @endif
+        </div>
+
+        <form method="POST" action="{{ $editStore ? route('stores.update', $editStore->id) : route('stores.store') }}" class="grid grid-2">
+            @csrf
+            @if ($editStore)
+                @method('PUT')
+            @endif
+
+            <div class="field">
+                <label for="name">Nombre interno</label>
+                <input id="name" name="name" value="{{ old('name', $editStore->name ?? '') }}" required>
+            </div>
+            <div class="field">
+                <label for="code">Codigo de store</label>
+                <input id="code" name="code" value="{{ old('code', $editStore->code ?? '') }}" required>
+            </div>
+            <div class="field">
+                <label for="timezone">Timezone</label>
+                <input id="timezone" name="timezone" value="{{ old('timezone', $editStore->timezone ?? 'America/Tijuana') }}" required>
+            </div>
+            <div class="field">
+                <label for="business_name">Nombre comercial</label>
+                <input id="business_name" name="business_name" value="{{ old('business_name', $editStore ? data_get(json_decode($editStore->branding_json, true), 'business_name') : '') }}">
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label for="terminal_name">Nombre de caja por default</label>
+                <input id="terminal_name" name="terminal_name" value="{{ old('terminal_name', $editStore ? data_get(json_decode($editStore->branding_json, true), 'terminal_name') : '') }}">
+            </div>
+            <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div>
+                    <h4>Estado de la store</h4>
+                    <p>Desactiva una sucursal si quieres detener check-ins nuevos sin borrar su historial.</p>
+                </div>
+                <label style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                    <input id="is_active" name="is_active" type="checkbox" value="1" {{ old('is_active', $editStore->is_active ?? true) ? 'checked' : '' }} style="width: auto;">
+                    <span>Store activa</span>
+                </label>
+            </div>
+            <div class="row-actions" style="grid-column: 1 / -1;">
+                <button class="button" type="submit">{{ $editStore ? 'Guardar store' : 'Crear store' }}</button>
+            </div>
+        </form>
+    </article>
+
+    <article class="card">
+        <div class="toolbar">
+            <div>
+                <small class="eyebrow">Resumen</small>
+                <h3>Stores del tenant</h3>
+            </div>
+            <span class="pill">{{ $stores->count() }} registradas</span>
+        </div>
+
+        <div class="stack">
             @foreach ($stores as $store)
-                <tr>
-                    <td>
-                        <strong>{{ $store->name }}</strong><br>
-                        <span class="muted">Tenant #{{ $store->tenant_id }}</span>
-                    </td>
-                    <td>{{ $store->code }}</td>
-                    <td>{{ $store->timezone }}</td>
-                    <td>v{{ $store->catalog_version }}</td>
-                    <td><span class="pill">{{ $store->is_active ? 'Activa' : 'Inactiva' }}</span></td>
-                </tr>
+                @php($branding = json_decode($store->branding_json, true))
+                <div class="surface">
+                    <div class="toolbar" style="margin-bottom: 12px; align-items: flex-start;">
+                        <div>
+                            <h4>{{ $store->name }}</h4>
+                            <p>{{ $store->code }} · {{ $store->timezone }}</p>
+                        </div>
+                        <span class="pill {{ $store->is_active ? 'success' : 'danger' }}">{{ $store->is_active ? 'Activa' : 'Inactiva' }}</span>
+                    </div>
+                    <div class="grid grid-2" style="gap: 12px; margin-bottom: 14px;">
+                        <div>
+                            <small class="eyebrow">Branding</small>
+                            <p>{{ data_get($branding, 'business_name', 'sin branding') }}</p>
+                            <p class="muted">Caja base: {{ data_get($branding, 'terminal_name', 'sin terminal') }}</p>
+                        </div>
+                        <div>
+                            <small class="eyebrow">Operacion</small>
+                            <p>{{ $deviceCounts[$store->id] ?? 0 }} devices · {{ $catalogCounts[$store->id] ?? 0 }} items</p>
+                            <p class="muted">Catalogo v{{ $store->catalog_version }}</p>
+                        </div>
+                    </div>
+                    <div class="row-actions">
+                        <code>{{ $store->api_key }}</code>
+                        <a class="button-secondary" href="{{ route('stores.index', ['edit' => $store->id]) }}">Editar</a>
+                        <form method="POST" action="{{ route('stores.rotate-key', $store->id) }}">
+                            @csrf
+                            <button class="button-secondary" type="submit">Regenerar key</button>
+                        </form>
+                    </div>
+                </div>
             @endforeach
-        </tbody>
-    </table>
+        </div>
+    </article>
 </section>
 @endsection
