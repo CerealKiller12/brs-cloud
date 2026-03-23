@@ -408,7 +408,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
 
     $accepted = [];
     $conflicts = [];
-    $catalogMutationEventTypes = ['product.created', 'product.updated', 'product.deleted', 'product.stock-adjusted'];
+    $catalogMutationEventTypes = ['product.created', 'product.updated', 'product.deleted'];
     $startingCatalogVersion = (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version');
 
     foreach ($payload['events'] as $event) {
@@ -513,12 +513,13 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
 
                 if ($existingProduct) {
                     $catalogVersion = $nextCatalogVersion();
+                    $delta = (int) round($eventPayload['delta'] ?? 0);
 
                     DB::table('cloud_catalog_products')
                         ->where('id', $existingProduct->id)
                         ->update([
                             'barcode' => ($eventPayload['barcode'] ?? $existingProduct->barcode) ?: null,
-                            'stock_on_hand' => (int) round($eventPayload['stockOnHand'] ?? $existingProduct->stock_on_hand),
+                            'stock_on_hand' => max(0, (int) $existingProduct->stock_on_hand + $delta),
                             'catalog_version' => $catalogVersion,
                             'updated_at' => now(),
                         ]);
@@ -602,4 +603,3 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
         'deviceId' => $payload['device_id'],
     ]);
 })->middleware('auth:sanctum');
-
