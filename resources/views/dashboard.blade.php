@@ -76,7 +76,7 @@
                             <strong>{{ $event->event_type }}</strong><br>
                             <span class="muted">{{ $event->aggregate_type }} · {{ $event->device_id }}</span>
                         </div>
-                        <div class="muted">{{ \\Illuminate\\Support\\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</div>
+                        <div class="muted">{{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</div>
                     </div>
                 @endforeach
             </div>
