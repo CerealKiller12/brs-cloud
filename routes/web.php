@@ -96,11 +96,11 @@ $humanizeDeviceLabel = function (?string $deviceId, ?string $deviceName = null, 
         return 'Caja sin nombre';
     }
 
-    if ($platform === 'ios' || str_starts_with($deviceId, 'ipad-')) {
+    if ($platform === 'ios' || Str::startsWith($deviceId, 'ipad-')) {
         return 'Caja iPad';
     }
 
-    if ($platform === 'desktop' || str_starts_with($deviceId, 'desktop-')) {
+    if ($platform === 'desktop' || Str::startsWith($deviceId, 'desktop-')) {
         return 'Caja de escritorio';
     }
 
