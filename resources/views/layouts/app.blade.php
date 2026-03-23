@@ -353,6 +353,53 @@
         .meta-row:last-child { border-bottom: 0; }
         .muted { color: var(--muted); }
         .pagination { margin-top: 16px; }
+        .pagination nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .pagination nav > div:first-child {
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .pagination nav > div:last-child {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .pagination a,
+        .pagination span[aria-current="page"] > span,
+        .pagination nav > div:last-child > span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+            min-height: 42px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: var(--panel-soft);
+            color: #486175;
+            font-size: 14px;
+            line-height: 1;
+        }
+        .pagination a:hover {
+            background: #eaf1f6;
+        }
+        .pagination span[aria-current="page"] > span {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+        .pagination svg {
+            width: 16px;
+            height: 16px;
+            display: block;
+            flex: none;
+        }
         .stack { display: grid; gap: 12px; }
         .row-actions {
             display: flex;
