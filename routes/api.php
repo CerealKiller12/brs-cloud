@@ -100,6 +100,15 @@ $resolveStoreContext = function (Request $request) {
     $actor = $request->user();
 
     if (!$actor) {
+        $bearerToken = trim((string) $request->bearerToken());
+
+        if ($bearerToken !== '') {
+            $token = PersonalAccessToken::findToken($bearerToken);
+            $actor = $token?->tokenable;
+        }
+    }
+
+    if (!$actor) {
         $deviceToken = trim((string) $request->query('device_token', ''));
 
         if ($deviceToken !== '') {
