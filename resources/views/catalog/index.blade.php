@@ -93,7 +93,8 @@
     $broadcastOptions = (array) ($broadcastConnection['options'] ?? []);
     $broadcastScheme = (string) ($broadcastOptions['scheme'] ?? (request()->isSecure() ? 'https' : 'http'));
     $broadcastPort = (int) ($broadcastOptions['port'] ?? ($broadcastScheme === 'https' ? 443 : 80));
-    $broadcastHost = (string) ($broadcastOptions['host'] ?? request()->getHost());
+    $configuredBroadcastHost = env($broadcastDriver === 'pusher' ? 'PUSHER_HOST' : 'REVERB_HOST');
+    $broadcastHost = $configuredBroadcastHost ? (string) ($broadcastOptions['host'] ?? request()->getHost()) : '';
     $broadcastCluster = (string) ($broadcastOptions['cluster'] ?? 'mt1');
 @endphp
 
@@ -212,16 +213,23 @@
         return;
     }
 
-    const realtime = new window.Pusher(appKey, {
+    const realtimeOptions = {
         cluster,
-        wsHost: host,
-        wsPort: port,
-        wssPort: port,
-        wsPath: path || undefined,
         forceTLS: scheme === 'https',
         enabledTransports: ['ws', 'wss'],
         disableStats: true,
-    });
+    };
+
+    if (host) {
+        Object.assign(realtimeOptions, {
+            wsHost: host,
+            wsPort: port,
+            wssPort: port,
+            wsPath: path || undefined,
+        });
+    }
+
+    const realtime = new window.Pusher(appKey, realtimeOptions);
 
     const channel = realtime.subscribe(channelName);
     setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);

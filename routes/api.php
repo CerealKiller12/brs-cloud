@@ -544,6 +544,7 @@ Route::get('/cloud/realtime-config', function (Request $request) use ($resolveSt
     $defaultConnection = (string) config('broadcasting.default', 'null');
     $connection = (array) config("broadcasting.connections.{$defaultConnection}", []);
     $options = (array) ($connection['options'] ?? []);
+    $configuredHost = env($defaultConnection === 'pusher' ? 'PUSHER_HOST' : 'REVERB_HOST');
     $scheme = (string) ($options['scheme'] ?? ($request->isSecure() ? 'https' : 'http'));
     $defaultPort = $scheme === 'https' ? 443 : 80;
 
@@ -552,7 +553,7 @@ Route::get('/cloud/realtime-config', function (Request $request) use ($resolveSt
             'driver' => $defaultConnection,
             'key' => (string) ($connection['key'] ?? ''),
             'cluster' => (string) ($options['cluster'] ?? 'mt1'),
-            'host' => (string) ($options['host'] ?? $request->getHost()),
+            'host' => $configuredHost ? (string) ($options['host'] ?? $request->getHost()) : '',
             'port' => (int) ($options['port'] ?? $defaultPort),
             'scheme' => $scheme,
             'path' => (string) config('reverb.servers.reverb.path', ''),
