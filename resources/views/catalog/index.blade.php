@@ -7,7 +7,98 @@
     <p>Este snapshot alimenta cajas offline-first y se redistribuye por version de catalogo.</p>
 </section>
 
+@if (session('status'))
+    <section class="card" style="padding: 16px 20px; background: #edf7ef; border-color: #c9e6cf; color: #24523a;">
+        {{ session('status') }}
+    </section>
+@endif
+
+@if ($errors->any())
+    <section class="card" style="padding: 16px 20px; background: #fde8e3; border-color: #f6c9bf; color: #9d4635;">
+        {{ $errors->first() }}
+    </section>
+@endif
+
+<section class="grid grid-2">
+    <article class="card">
+        <div class="toolbar">
+            <div>
+                <small class="eyebrow">Editor</small>
+                <h3>{{ $editProduct ? 'Editar producto cloud' : 'Nuevo producto cloud' }}</h3>
+            </div>
+            @if ($editProduct)
+                <a class="pill" href="{{ route('catalog.index') }}">Cancelar edicion</a>
+            @endif
+        </div>
+
+        <form method="POST" action="{{ $editProduct ? route('catalog.update', $editProduct->id) : route('catalog.store') }}" class="grid grid-2">
+            @csrf
+            @if ($editProduct)
+                @method('PUT')
+            @endif
+
+            <div>
+                <label for="sku">SKU</label>
+                <input id="sku" name="sku" value="{{ old('sku', $editProduct->sku ?? '') }}" required>
+            </div>
+            <div>
+                <label for="barcode">Codigo de barras</label>
+                <input id="barcode" name="barcode" value="{{ old('barcode', $editProduct->barcode ?? '') }}">
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <label for="name">Nombre</label>
+                <input id="name" name="name" value="{{ old('name', $editProduct->name ?? '') }}" required>
+            </div>
+            <div>
+                <label for="price">Precio</label>
+                <input id="price" name="price" type="number" step="0.01" min="0" value="{{ old('price', isset($editProduct) ? number_format($editProduct->price_cents / 100, 2, '.', '') : '') }}" required>
+            </div>
+            <div>
+                <label for="cost">Costo</label>
+                <input id="cost" name="cost" type="number" step="0.01" min="0" value="{{ old('cost', isset($editProduct) ? number_format($editProduct->cost_cents / 100, 2, '.', '') : '') }}">
+            </div>
+            <div>
+                <label for="stock_on_hand">Stock</label>
+                <input id="stock_on_hand" name="stock_on_hand" type="number" min="0" value="{{ old('stock_on_hand', $editProduct->stock_on_hand ?? 0) }}" required>
+            </div>
+            <div>
+                <label for="reorder_point">Punto de reorden</label>
+                <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', $editProduct->reorder_point ?? 0) }}" required>
+            </div>
+            <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;">
+                <input id="track_inventory" name="track_inventory" type="checkbox" value="1" {{ old('track_inventory', $editProduct->track_inventory ?? true) ? 'checked' : '' }} style="width: auto;">
+                <label for="track_inventory" style="margin: 0;">Controlar inventario desde cloud</label>
+            </div>
+            <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">
+                <button class="button" type="submit">{{ $editProduct ? 'Guardar cambios' : 'Crear producto' }}</button>
+            </div>
+        </form>
+    </article>
+
+    <article class="card">
+        <small class="eyebrow">Store</small>
+        <h3>{{ $store->name }}</h3>
+        <div class="meta-list" style="margin-top: 16px;">
+            <div class="meta-row"><span class="muted">Codigo</span><strong>{{ $store->code }}</strong></div>
+            <div class="meta-row"><span class="muted">Catalog version</span><strong>v{{ $store->catalog_version }}</strong></div>
+            <div class="meta-row"><span class="muted">Timezone</span><strong>{{ $store->timezone }}</strong></div>
+            <div class="meta-row"><span class="muted">Branding</span><strong>{{ data_get($store->branding_json, 'business_name', 'n/a') }}</strong></div>
+        </div>
+    </article>
+</section>
+
 <section class="card">
+    <div class="toolbar">
+        <div>
+            <small class="eyebrow">Inventario cloud</small>
+            <h3>Snapshot actual</h3>
+        </div>
+        <form method="GET" action="{{ route('catalog.index') }}" style="display: flex; gap: 10px; align-items: center;">
+            <input name="q" value="{{ $search }}" placeholder="Buscar por nombre, SKU o barcode" style="width: 320px;">
+            <button class="button" type="submit">Buscar</button>
+        </form>
+    </div>
+
     <table class="table">
         <thead>
             <tr>
@@ -16,22 +107,39 @@
                 <th>Barcode</th>
                 <th>Precio</th>
                 <th>Stock</th>
+                <th>Estado</th>
                 <th>Version</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach ($catalog as $item)
+            @forelse ($catalog as $item)
                 <tr>
                     <td><strong>{{ $item->name }}</strong></td>
                     <td>{{ $item->sku }}</td>
-                    <td>{{ $item->barcode }}</td>
+                    <td>{{ $item->barcode ?: '—' }}</td>
                     <td>MX${{ number_format($item->price_cents / 100, 2) }}</td>
                     <td>{{ $item->stock_on_hand }}</td>
+                    <td><span class="pill">{{ $item->is_active ? 'Activo' : 'Inactivo' }}</span></td>
                     <td>v{{ $item->catalog_version }}</td>
+                    <td>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <a class="pill" href="{{ route('catalog.index', ['edit' => $item->id] + ($search ? ['q' => $search] : [])) }}">Editar</a>
+                            <form method="POST" action="{{ route('catalog.toggle', $item->id) }}">
+                                @csrf
+                                <button class="pill" type="submit" style="cursor: pointer;">{{ $item->is_active ? 'Desactivar' : 'Activar' }}</button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
-            @endforeach
+            @empty
+                <tr>
+                    <td colspan="8"><div class="empty">No hay productos que coincidan con la busqueda actual.</div></td>
+                </tr>
+            @endforelse
         </tbody>
     </table>
+
     <div class="pagination">{{ $catalog->links() }}</div>
 </section>
 @endsection
