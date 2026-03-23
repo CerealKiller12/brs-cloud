@@ -92,7 +92,13 @@
     data-cloud-catalog-live
     data-catalog-version="{{ (int) $store->catalog_version }}"
     data-store-id="{{ (int) $store->id }}"
-    data-events-url="{{ route('catalog.events', ['store_id' => $store->id]) }}">
+    data-reverb-app-key="{{ config('broadcasting.connections.reverb.key') }}"
+    data-reverb-host="{{ env('REVERB_HOST', request()->getHost()) }}"
+    data-reverb-port="{{ (int) env('REVERB_PORT', request()->isSecure() ? 443 : 80) }}"
+    data-reverb-scheme="{{ env('REVERB_SCHEME', request()->isSecure() ? 'https' : 'http') }}"
+    data-reverb-path="{{ env('REVERB_PATH', '') }}"
+    data-reverb-channel="catalog.store.{{ (int) $store->id }}"
+    data-reverb-event="catalog.version.changed">
     <div class="toolbar">
         <div>
             <small class="eyebrow">Inventario cloud</small>
@@ -162,18 +168,24 @@
     <div class="pagination">{{ $catalog->links() }}</div>
 </section>
 
+<script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <script>
 (() => {
     const root = document.querySelector('[data-cloud-catalog-live]');
 
-    if (!root) {
+    if (!root || !window.Pusher) {
         return;
     }
 
     let currentVersion = Number(root.dataset.catalogVersion || '0');
-    const eventsUrl = root.dataset.eventsUrl || '';
+    const appKey = root.dataset.reverbAppKey || '';
+    const host = root.dataset.reverbHost || window.location.hostname;
+    const port = Number(root.dataset.reverbPort || (window.location.protocol === 'https:' ? 443 : 80));
+    const scheme = root.dataset.reverbScheme || (window.location.protocol === 'https:' ? 'https' : 'http');
+    const path = root.dataset.reverbPath || '';
+    const channelName = root.dataset.reverbChannel || '';
+    const eventName = root.dataset.reverbEvent || 'catalog.version.changed';
     const liveStatus = root.querySelector('[data-live-status]');
-    let source = null;
 
     const setStatus = (text) => {
         if (liveStatus) {
@@ -181,55 +193,61 @@
         }
     };
 
-    const connect = () => {
-        if (!eventsUrl || typeof EventSource === 'undefined') {
-            setStatus('Actualizacion automatica no disponible en este navegador.');
+    if (!appKey || !channelName) {
+        setStatus('Actualizacion automatica no disponible en este snapshot.');
+        return;
+    }
+
+    const reverb = new window.Pusher(appKey, {
+        cluster: 'mt1',
+        wsHost: host,
+        wsPort: port,
+        wssPort: port,
+        wsPath: path || undefined,
+        forceTLS: scheme === 'https',
+        enabledTransports: ['ws', 'wss'],
+        disableStats: true,
+    });
+
+    const channel = reverb.subscribe(channelName);
+    setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
+
+    channel.bind(eventName, (payload) => {
+        const nextVersion = Number(payload?.catalogVersion || 0);
+
+        if (nextVersion > currentVersion) {
+            setStatus(`Aplicando cambios del snapshot v${nextVersion}...`);
+            window.location.reload();
             return;
         }
 
-        if (source) {
-            source.close();
-        }
+        currentVersion = nextVersion;
+        setStatus(`Snapshot al dia en v${currentVersion}.`);
+    });
 
-        source = new EventSource(eventsUrl, { withCredentials: true });
-        setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
+    reverb.connection.bind('connected', () => {
+        setStatus(`Snapshot al dia en v${currentVersion}.`);
+    });
 
-        source.addEventListener('catalog.version', (event) => {
-            const payload = JSON.parse(event.data || '{}');
-            const nextVersion = Number(payload.catalogVersion || 0);
-
-            if (nextVersion > currentVersion) {
-                setStatus(`Aplicando cambios del snapshot v${nextVersion}...`);
-                window.location.reload();
-                return;
-            }
-
-            currentVersion = nextVersion;
-            setStatus(`Snapshot al dia en v${currentVersion}.`);
-        });
-
-        source.addEventListener('heartbeat', (event) => {
-            const payload = JSON.parse(event.data || '{}');
-            currentVersion = Number(payload.catalogVersion || currentVersion);
-            setStatus(`Snapshot al dia en v${currentVersion}.`);
-        });
-
-        source.onerror = () => {
-            setStatus('Esperando reconexion del snapshot cloud...');
-        };
-    };
+    reverb.connection.bind('error', () => {
+        setStatus('No pude conectar el snapshot cloud en tiempo real.');
+    });
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            connect();
+            setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
         }
     });
 
-    window.addEventListener('focus', () => {
-        connect();
+    window.addEventListener('beforeunload', () => {
+        try {
+            channel.unbind_all();
+            reverb.unsubscribe(channelName);
+            reverb.disconnect();
+        } catch {
+            setStatus('Actualizacion automatica no disponible en este navegador.');
+        }
     });
-
-    connect();
 })();
 </script>
 @endsection
