@@ -407,6 +407,9 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
     };
 
     $accepted = [];
+    $conflicts = [];
+    $catalogMutationEventTypes = ['product.created', 'product.updated', 'product.deleted', 'product.stock-adjusted'];
+    $startingCatalogVersion = (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version');
 
     foreach ($payload['events'] as $event) {
         $existingSyncEvent = DB::table('sync_events')
@@ -441,8 +444,32 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
 
         try {
             $eventPayload = $event['payload'];
+            $eventType = $event['event_type'];
+            $baseCatalogVersion = array_key_exists('baseCatalogVersion', $eventPayload) && $eventPayload['baseCatalogVersion'] !== null
+                ? (int) $eventPayload['baseCatalogVersion']
+                : null;
+            $currentCatalogVersion = (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version');
 
-            if (in_array($event['event_type'], ['product.created', 'product.updated'], true)) {
+            if (in_array($eventType, $catalogMutationEventTypes, true) && $baseCatalogVersion !== null && $baseCatalogVersion !== $startingCatalogVersion) {
+                $message = "La caja intento editar catalogo sobre v{$baseCatalogVersion}, pero BRS Cloud ya va en v{$currentCatalogVersion}.";
+
+                DB::table('sync_events')
+                    ->where('store_id', $store->store_row_id)
+                    ->where('event_id', $event['event_id'])
+                    ->update([
+                        'apply_error' => $message,
+                        'updated_at' => now(),
+                    ]);
+
+                $conflicts[] = [
+                    'eventId' => $event['event_id'],
+                    'message' => $message,
+                    'currentCatalogVersion' => $currentCatalogVersion,
+                ];
+                continue;
+            }
+
+            if (in_array($eventType, ['product.created', 'product.updated'], true)) {
                 $sku = trim((string) ($eventPayload['sku'] ?? ''));
 
                 if ($sku !== '') {
@@ -481,7 +508,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 }
             }
 
-            if ($event['event_type'] === 'product.stock-adjusted') {
+            if ($eventType === 'product.stock-adjusted') {
                 $existingProduct = $findCatalogProduct($eventPayload);
 
                 if ($existingProduct) {
@@ -498,7 +525,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 }
             }
 
-            if ($event['event_type'] === 'product.deleted') {
+            if ($eventType === 'product.deleted') {
                 $existingProduct = $findCatalogProduct($eventPayload);
 
                 if ($existingProduct) {
@@ -510,7 +537,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 }
             }
 
-            if ($event['event_type'] === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
+            if ($eventType === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
                 $catalogVersion = null;
 
                 foreach ($eventPayload['items'] as $item) {
@@ -568,7 +595,9 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
     return response()->json([
         'ok' => true,
         'accepted' => $accepted,
+        'conflicts' => $conflicts,
         'count' => count($accepted),
+        'catalogVersion' => (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version'),
         'storeCode' => $store->store_code,
         'deviceId' => $payload['device_id'],
     ]);
