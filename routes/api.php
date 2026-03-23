@@ -1,0 +1,247 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rule;
+
+$supportedPlatforms = [
+    'windows-x64',
+    'windows-arm64',
+    'linux-x64',
+    'linux-arm64',
+    'linux-armhf',
+    'macos-x64',
+    'macos-arm64',
+    'ios',
+    'android',
+];
+
+Route::get('/health', function () {
+    return response()->json([
+        'ok' => true,
+        'service' => 'brs-cloud',
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
+
+$resolveStoreContext = function (Request $request) {
+    $storeCode = $request->header('X-BRS-Store-Code', $request->input('store_code'));
+    $storeKey = $request->header('X-BRS-Store-Key', $request->input('store_key'));
+
+    if (!$storeCode || !$storeKey) {
+        abort(response()->json([
+            'message' => 'Debes enviar X-BRS-Store-Code y X-BRS-Store-Key.',
+        ], 401));
+    }
+
+    $store = DB::table('stores')
+        ->join('tenants', 'tenants.id', '=', 'stores.tenant_id')
+        ->select([
+            'stores.id as store_row_id',
+            'stores.tenant_id',
+            'stores.name as store_name',
+            'stores.code as store_code',
+            'stores.timezone',
+            'stores.api_key',
+            'stores.catalog_version',
+            'stores.is_active as store_is_active',
+            'stores.branding_json',
+            'stores.role_access_json',
+            'tenants.name as tenant_name',
+            'tenants.slug as tenant_slug',
+            'tenants.plan_code',
+            'tenants.subscription_status',
+            'tenants.is_active as tenant_is_active',
+        ])
+        ->where('stores.code', $storeCode)
+        ->first();
+
+    if (!$store || $store->api_key !== $storeKey) {
+        abort(response()->json([
+            'message' => 'No pude autenticar la tienda en BRS Cloud.',
+        ], 403));
+    }
+
+    if (!(bool) $store->store_is_active || !(bool) $store->tenant_is_active) {
+        abort(response()->json([
+            'message' => 'La tienda o el tenant estan inactivos en BRS Cloud.',
+        ], 403));
+    }
+
+    return $store;
+};
+
+Route::get('/cloud/health', function () {
+    return response()->json([
+        'ok' => true,
+        'service' => 'brs-cloud',
+        'capabilities' => [
+            'tenants' => true,
+            'stores' => true,
+            'catalogSync' => true,
+            'deviceBootstrap' => true,
+            'eventSync' => true,
+            'subscriptions' => 'pending',
+        ],
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
+
+Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatforms, $resolveStoreContext) {
+    $payload = $request->validate([
+        'device_id' => ['required', 'string', 'max:120'],
+        'name' => ['nullable', 'string', 'max:120'],
+        'platform' => ['required', 'string', 'max:40', Rule::in($supportedPlatforms)],
+        'device_type' => ['nullable', 'string', 'max:40'],
+        'app_mode' => ['nullable', 'string', 'max:40'],
+        'channel' => ['nullable', 'string', 'max:40'],
+        'current_version' => ['nullable', 'string', 'max:40'],
+        'metadata' => ['nullable', 'array'],
+    ]);
+
+    $store = $resolveStoreContext($request);
+    $now = now();
+
+    DB::table('devices')->updateOrInsert(
+        ['device_id' => $payload['device_id']],
+        [
+            'tenant_id' => $store->tenant_id,
+            'store_id' => $store->store_row_id,
+            'name' => $payload['name'] ?? null,
+            'platform' => $payload['platform'],
+            'device_type' => $payload['device_type'] ?? null,
+            'app_mode' => $payload['app_mode'] ?? null,
+            'channel' => $payload['channel'] ?? 'stable',
+            'branch_name' => $store->store_name,
+            'current_version' => $payload['current_version'] ?? null,
+            'ip_address' => $request->ip(),
+            'metadata_json' => array_key_exists('metadata', $payload) ? json_encode($payload['metadata']) : null,
+            'last_seen_at' => $now,
+            'updated_at' => $now,
+            'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+        ]
+    );
+
+    return response()->json([
+        'ok' => true,
+        'tenant' => [
+            'id' => $store->tenant_id,
+            'name' => $store->tenant_name,
+            'slug' => $store->tenant_slug,
+            'planCode' => $store->plan_code,
+            'subscriptionStatus' => $store->subscription_status,
+        ],
+        'store' => [
+            'id' => $store->store_row_id,
+            'name' => $store->store_name,
+            'code' => $store->store_code,
+            'timezone' => $store->timezone,
+            'catalogVersion' => $store->catalog_version,
+            'branding' => $store->branding_json ? json_decode($store->branding_json, true) : null,
+            'roleAccess' => $store->role_access_json ? json_decode($store->role_access_json, true) : null,
+        ],
+        'device' => [
+            'deviceId' => $payload['device_id'],
+            'checkedInAt' => $now->toIso8601String(),
+        ],
+        'entitlements' => [
+            'offlineFirst' => true,
+            'catalogSync' => true,
+            'salesSync' => true,
+            'sharedCatalogAcrossDevices' => true,
+        ],
+    ]);
+});
+
+Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreContext) {
+    $store = $resolveStoreContext($request);
+
+    $products = DB::table('cloud_catalog_products')
+        ->where('store_id', $store->store_row_id)
+        ->where('is_active', true)
+        ->orderBy('name')
+        ->get([
+            'sku',
+            'barcode',
+            'name',
+            'price_cents',
+            'cost_cents',
+            'stock_on_hand',
+            'reorder_point',
+            'track_inventory',
+            'catalog_version',
+            'updated_at',
+        ]);
+
+    return response()->json([
+        'store' => [
+            'code' => $store->store_code,
+            'catalogVersion' => $store->catalog_version,
+        ],
+        'items' => $products->map(fn (object $product) => [
+            'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'name' => $product->name,
+            'priceCents' => $product->price_cents,
+            'costCents' => $product->cost_cents,
+            'stockOnHand' => $product->stock_on_hand,
+            'reorderPoint' => $product->reorder_point,
+            'trackInventory' => (bool) $product->track_inventory,
+            'catalogVersion' => $product->catalog_version,
+            'updatedAt' => $product->updated_at,
+        ])->values(),
+    ]);
+});
+
+Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
+    $payload = $request->validate([
+        'device_id' => ['required', 'string', 'max:120'],
+        'events' => ['required', 'array', 'min:1'],
+        'events.*.event_id' => ['required', 'string', 'max:120'],
+        'events.*.aggregate_type' => ['required', 'string', 'max:60'],
+        'events.*.event_type' => ['required', 'string', 'max:120'],
+        'events.*.occurred_at' => ['required', 'date'],
+        'events.*.payload' => ['required', 'array'],
+    ]);
+
+    $store = $resolveStoreContext($request);
+    $device = DB::table('devices')
+        ->where('device_id', $payload['device_id'])
+        ->where('store_id', $store->store_row_id)
+        ->first();
+
+    $accepted = [];
+
+    foreach ($payload['events'] as $event) {
+        DB::table('sync_events')->updateOrInsert(
+            [
+                'store_id' => $store->store_row_id,
+                'event_id' => $event['event_id'],
+            ],
+            [
+                'tenant_id' => $store->tenant_id,
+                'device_row_id' => $device?->id,
+                'device_id' => $payload['device_id'],
+                'aggregate_type' => $event['aggregate_type'],
+                'event_type' => $event['event_type'],
+                'occurred_at' => Carbon::parse($event['occurred_at']),
+                'payload_json' => json_encode($event['payload']),
+                'received_at' => now(),
+                'updated_at' => now(),
+                'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+            ]
+        );
+
+        $accepted[] = $event['event_id'];
+    }
+
+    return response()->json([
+        'ok' => true,
+        'accepted' => $accepted,
+        'count' => count($accepted),
+        'storeCode' => $store->store_code,
+        'deviceId' => $payload['device_id'],
+    ]);
+});
