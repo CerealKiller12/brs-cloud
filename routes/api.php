@@ -1,7 +1,10 @@
 <?php
 
+use App\Models\Device;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
@@ -27,6 +30,64 @@ Route::get('/health', function () {
 });
 
 $resolveStoreContext = function (Request $request) {
+    $actor = $request->user();
+
+    if ($actor instanceof Device) {
+        $store = DB::table('stores')
+            ->join('tenants', 'tenants.id', '=', 'stores.tenant_id')
+            ->select([
+                'stores.id as store_row_id',
+                'stores.tenant_id',
+                'stores.name as store_name',
+                'stores.code as store_code',
+                'stores.timezone',
+                'stores.api_key',
+                'stores.catalog_version',
+                'stores.is_active as store_is_active',
+                'stores.branding_json',
+                'stores.role_access_json',
+                'tenants.name as tenant_name',
+                'tenants.slug as tenant_slug',
+                'tenants.plan_code',
+                'tenants.subscription_status',
+                'tenants.is_active as tenant_is_active',
+            ])
+            ->where('stores.id', $actor->store_id)
+            ->first();
+
+        if ($store) {
+            return $store;
+        }
+    }
+
+    if ($actor instanceof User && $actor->store_id) {
+        $store = DB::table('stores')
+            ->join('tenants', 'tenants.id', '=', 'stores.tenant_id')
+            ->select([
+                'stores.id as store_row_id',
+                'stores.tenant_id',
+                'stores.name as store_name',
+                'stores.code as store_code',
+                'stores.timezone',
+                'stores.api_key',
+                'stores.catalog_version',
+                'stores.is_active as store_is_active',
+                'stores.branding_json',
+                'stores.role_access_json',
+                'tenants.name as tenant_name',
+                'tenants.slug as tenant_slug',
+                'tenants.plan_code',
+                'tenants.subscription_status',
+                'tenants.is_active as tenant_is_active',
+            ])
+            ->where('stores.id', $actor->store_id)
+            ->first();
+
+        if ($store) {
+            return $store;
+        }
+    }
+
     $storeCode = $request->header('X-BRS-Store-Code', $request->input('store_code'));
     $storeKey = $request->header('X-BRS-Store-Key', $request->input('store_key'));
 
@@ -72,6 +133,116 @@ $resolveStoreContext = function (Request $request) {
 
     return $store;
 };
+
+Route::post('/auth/login', function (Request $request) {
+    $payload = $request->validate([
+        'email' => ['required', 'email'],
+        'password' => ['required', 'string', 'min:6'],
+    ]);
+
+    /** @var User|null $user */
+    $user = User::query()->where('email', $payload['email'])->first();
+
+    if (!$user || !$user->is_active || !Hash::check($payload['password'], $user->password)) {
+        return response()->json([
+            'message' => 'Credenciales invalidas para BRS Cloud.',
+        ], 422);
+    }
+
+    $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
+    $store = $user->store_id ? DB::table('stores')->where('id', $user->store_id)->first() : null;
+    $tenant = $user->tenant_id ? DB::table('tenants')->where('id', $user->tenant_id)->first() : null;
+
+    return response()->json([
+        'token' => $token,
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+        ],
+        'tenant' => $tenant ? [
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'slug' => $tenant->slug,
+            'planCode' => $tenant->plan_code,
+            'subscriptionStatus' => $tenant->subscription_status,
+        ] : null,
+        'store' => $store ? [
+            'id' => $store->id,
+            'name' => $store->name,
+            'code' => $store->code,
+        ] : null,
+    ]);
+});
+
+Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) {
+    $user = $request->user();
+
+    return response()->json([
+        'id' => $user->id,
+        'name' => $user->name,
+        'email' => $user->email,
+        'role' => $user->role,
+        'tenantId' => $user->tenant_id,
+        'storeId' => $user->store_id,
+    ]);
+});
+
+Route::middleware('auth:sanctum')->post('/auth/logout', function (Request $request) {
+    $request->user()?->currentAccessToken()?->delete();
+
+    return response()->json([
+        'ok' => true,
+    ]);
+});
+
+Route::post('/cloud/device-token', function (Request $request) use ($supportedPlatforms, $resolveStoreContext) {
+    $payload = $request->validate([
+        'device_id' => ['required', 'string', 'max:120'],
+        'name' => ['nullable', 'string', 'max:120'],
+        'platform' => ['required', 'string', 'max:40', Rule::in($supportedPlatforms)],
+        'device_type' => ['nullable', 'string', 'max:40'],
+        'app_mode' => ['nullable', 'string', 'max:40'],
+        'current_version' => ['nullable', 'string', 'max:40'],
+        'metadata' => ['nullable', 'array'],
+    ]);
+
+    $store = $resolveStoreContext($request);
+    $now = now();
+
+    DB::table('devices')->updateOrInsert(
+        ['device_id' => $payload['device_id']],
+        [
+            'tenant_id' => $store->tenant_id,
+            'store_id' => $store->store_row_id,
+            'name' => $payload['name'] ?? null,
+            'platform' => $payload['platform'],
+            'device_type' => $payload['device_type'] ?? null,
+            'app_mode' => $payload['app_mode'] ?? null,
+            'channel' => 'stable',
+            'branch_name' => $store->store_name,
+            'current_version' => $payload['current_version'] ?? null,
+            'ip_address' => $request->ip(),
+            'metadata_json' => array_key_exists('metadata', $payload) ? json_encode($payload['metadata']) : null,
+            'last_seen_at' => $now,
+            'updated_at' => $now,
+            'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+        ]
+    );
+
+    /** @var Device $device */
+    $device = Device::query()->where('device_id', $payload['device_id'])->firstOrFail();
+    $device->tokens()->where('name', 'device-sync')->delete();
+    $token = $device->createToken('device-sync', ['catalog:read', 'events:write', 'bootstrap:read'])->plainTextToken;
+
+    return response()->json([
+        'token' => $token,
+        'deviceId' => $device->device_id,
+        'storeCode' => $store->store_code,
+        'issuedAt' => $now->toIso8601String(),
+    ]);
+});
 
 Route::get('/cloud/health', function () {
     return response()->json([
@@ -153,7 +324,7 @@ Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatf
             'sharedCatalogAcrossDevices' => true,
         ],
     ]);
-});
+})->middleware('auth:sanctum');
 
 Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreContext) {
     $store = $resolveStoreContext($request);
@@ -193,7 +364,7 @@ Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreConte
             'updatedAt' => $product->updated_at,
         ])->values(),
     ]);
-});
+})->middleware('auth:sanctum');
 
 Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
     $payload = $request->validate([
@@ -244,4 +415,4 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
         'storeCode' => $store->store_code,
         'deviceId' => $payload['device_id'],
     ]);
-});
+})->middleware('auth:sanctum');

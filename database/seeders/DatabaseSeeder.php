@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -110,5 +111,20 @@ class DatabaseSeeder extends Seeder
                 ]
             );
         }
+
+        User::updateOrCreate(
+            ['email' => 'owner@bajaretailsystem.demo'],
+            [
+                'tenant_id' => $tenant->id,
+                'store_id' => $store->id,
+                'name' => 'Luis Garcia',
+                'role' => 'owner',
+                'is_active' => true,
+                'email_verified_at' => $now,
+                'password' => 'demo1234',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
     }
 }
