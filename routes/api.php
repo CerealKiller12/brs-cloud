@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
+use Laravel\Sanctum\PersonalAccessToken;
 
 $supportedPlatforms = [
     'windows-x64',
@@ -97,6 +98,15 @@ Route::get('/health', function () {
 
 $resolveStoreContext = function (Request $request) {
     $actor = $request->user();
+
+    if (!$actor) {
+        $deviceToken = trim((string) $request->query('device_token', ''));
+
+        if ($deviceToken !== '') {
+            $token = PersonalAccessToken::findToken($deviceToken);
+            $actor = $token?->tokenable;
+        }
+    }
 
     if ($actor instanceof Device) {
         $store = DB::table('stores')
@@ -596,7 +606,7 @@ Route::get('/cloud/events/stream', function (Request $request) use ($resolveStor
         (string) $store->store_code,
         (int) $store->catalog_version,
     );
-})->middleware('auth:sanctum');
+});
 
 Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
     $payload = $request->validate([
