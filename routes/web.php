@@ -9,13 +9,54 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Illuminate\Validation\Rule;
 
-$resolveStoreForUser = function (User $user) {
-    abort_unless($user->store_id, 403, 'El usuario cloud no tiene store asignada.');
+$buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
+    abort_unless($user->tenant_id, 403, 'El usuario cloud no tiene tenant asignado.');
 
-    return DB::table('stores')->where('id', $user->store_id)->firstOrFail();
+    $stores = Store::query()
+        ->where('tenant_id', $user->tenant_id)
+        ->orderBy('name')
+        ->get(['id', 'name', 'code', 'catalog_version', 'timezone', 'is_active']);
+
+    abort_unless($stores->isNotEmpty(), 403, 'El tenant cloud no tiene stores configuradas.');
+
+    $preferredStoreId = $requestedStoreId ?: session('cloud_active_store_id') ?: $user->store_id;
+    $activeStore = $stores->firstWhere('id', $preferredStoreId) ?? $stores->first();
+
+    if ((int) session('cloud_active_store_id') !== (int) $activeStore->id) {
+        session(['cloud_active_store_id' => $activeStore->id]);
+    }
+
+    return [$activeStore, $stores];
 };
+
+$resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use ($buildStoreContext) {
+    [$activeStore] = $buildStoreContext($user, $requestedStoreId);
+
+    return $activeStore;
+};
+
+View::composer('layouts.app', function ($view) use ($buildStoreContext) {
+    if (!Auth::check()) {
+        return;
+    }
+
+    /** @var User|null $user */
+    $user = Auth::user();
+
+    if (!$user?->tenant_id) {
+        return;
+    }
+
+    [$activeStore, $availableStores] = $buildStoreContext($user);
+
+    $view->with([
+        'cloudActiveStore' => $activeStore,
+        'cloudAvailableStores' => $availableStores,
+    ]);
+});
 
 $bumpCatalogVersion = function (int $storeId): int {
     DB::table('stores')->where('id', $storeId)->increment('catalog_version');
@@ -70,6 +111,23 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('login');
     })->name('logout');
 
+    Route::post('/context/store', function (Request $request) {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $payload = $request->validate([
+            'store_id' => ['required', 'integer'],
+        ]);
+
+        $store = Store::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->where('id', $payload['store_id'])
+            ->firstOrFail();
+
+        session(['cloud_active_store_id' => $store->id]);
+
+        return back()->with('status', "Store activa actualizada a {$store->name}.");
+    })->name('context.store');
 
     Route::get('/settings', function () {
         /** @var User $user */
@@ -197,30 +255,32 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('dashboard')->with('status', 'Onboarding inicial completado.');
     })->name('onboarding.store');
 
-    Route::get('/dashboard', function () {
+    Route::get('/dashboard', function () use ($resolveStoreForUser) {
         /** @var User $user */
         $user = Auth::user();
         $tenantId = $user->tenant_id;
-        $storeId = $user->store_id;
+        $store = $resolveStoreForUser($user);
+        $storeId = $store->id;
 
         $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
-        $store = $storeId ? DB::table('stores')->where('id', $storeId)->first() : null;
 
         $stats = [
             'stores' => DB::table('stores')->where('tenant_id', $tenantId)->count(),
             'devices' => DB::table('devices')->where('tenant_id', $tenantId)->count(),
             'catalogItems' => DB::table('cloud_catalog_products')->where('store_id', $storeId)->count(),
-            'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->count(),
+            'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
         ];
 
         $recentDevices = Device::query()
             ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
             ->latest('last_seen_at')
             ->limit(6)
             ->get();
 
         $recentEvents = DB::table('sync_events')
             ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
             ->latest('received_at')
             ->limit(8)
             ->get();
@@ -353,11 +413,12 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('stores.index', ['edit' => $storeId])->with('status', 'Store key regenerada.');
     })->name('stores.rotate-key');
 
-    Route::get('/devices', function (Request $request) {
+    Route::get('/devices', function (Request $request) use ($resolveStoreForUser) {
         /** @var User $user */
         $user = Auth::user();
+        $activeStore = $resolveStoreForUser($user);
         $search = trim((string) $request->query('q', ''));
-        $storeFilter = $request->integer('store_id');
+        $storeFilter = $request->integer('store_id') ?: $activeStore->id;
 
         $deviceQuery = Device::query()
             ->where('tenant_id', $user->tenant_id)
@@ -416,14 +477,17 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('devices.index')->with('status', 'Tokens del device revocados.');
     })->name('devices.revoke-token');
 
-    Route::get('/sync', function (Request $request) {
+    Route::get('/sync', function (Request $request) use ($resolveStoreForUser) {
         /** @var User $user */
         $user = Auth::user();
+        $activeStore = $resolveStoreForUser($user);
         $deviceFilter = trim((string) $request->query('device_id', ''));
         $eventFilter = trim((string) $request->query('event_type', ''));
+        $storeFilter = $request->integer('store_id') ?: $activeStore->id;
 
         $baseQuery = DB::table('sync_events')
             ->where('tenant_id', $user->tenant_id)
+            ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
             ->when($deviceFilter !== '', fn ($query) => $query->where('device_id', $deviceFilter))
             ->when($eventFilter !== '', fn ($query) => $query->where('event_type', 'like', "%{$eventFilter}%"));
 
@@ -431,6 +495,8 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'total' => (clone $baseQuery)->count(),
             'devices' => (clone $baseQuery)->distinct('device_id')->count('device_id'),
             'last24h' => (clone $baseQuery)->where('received_at', '>=', now()->subDay())->count(),
+            'conflicts' => (clone $baseQuery)->whereNotNull('apply_error')->count(),
+            'applied' => (clone $baseQuery)->whereNotNull('applied_at')->count(),
             'lastEventAt' => (clone $baseQuery)->max('received_at'),
         ];
 
@@ -448,10 +514,16 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         $deviceOptions = DB::table('devices')
             ->where('tenant_id', $user->tenant_id)
+            ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
             ->orderBy('name')
             ->get(['device_id', 'name']);
 
-        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'syncStats', 'topEventTypes'));
+        $storeOptions = Store::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes'));
     })->name('sync.index');
 
     Route::get('/catalog', function (Request $request) use ($resolveStoreForUser) {
@@ -462,7 +534,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $editId = $request->integer('edit');
 
         $catalogQuery = DB::table('cloud_catalog_products')
-            ->where('store_id', $user->store_id)
+            ->where('store_id', $store->id)
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
@@ -478,7 +550,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $editProduct = null;
         if ($editId) {
             $editProduct = DB::table('cloud_catalog_products')
-                ->where('store_id', $user->store_id)
+                ->where('store_id', $store->id)
                 ->where('id', $editId)
                 ->first();
         }
@@ -497,8 +569,8 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $store = $resolveStoreForUser($user);
 
         $payload = $request->validate([
-            'sku' => ['required', 'string', 'max:80', Rule::unique('cloud_catalog_products', 'sku')->where(fn ($q) => $q->where('store_id', $user->store_id))],
-            'barcode' => ['nullable', 'string', 'max:120', Rule::unique('cloud_catalog_products', 'barcode')->where(fn ($q) => $q->where('store_id', $user->store_id))],
+            'sku' => ['required', 'string', 'max:80', Rule::unique('cloud_catalog_products', 'sku')->where(fn ($q) => $q->where('store_id', $store->id))],
+            'barcode' => ['nullable', 'string', 'max:120', Rule::unique('cloud_catalog_products', 'barcode')->where(fn ($q) => $q->where('store_id', $store->id))],
             'name' => ['required', 'string', 'max:160'],
             'price' => ['required', 'numeric', 'min:0'],
             'cost' => ['nullable', 'numeric', 'min:0'],
@@ -539,8 +611,8 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->firstOrFail();
 
         $payload = $request->validate([
-            'sku' => ['required', 'string', 'max:80', Rule::unique('cloud_catalog_products', 'sku')->where(fn ($q) => $q->where('store_id', $user->store_id))->ignore($productId)],
-            'barcode' => ['nullable', 'string', 'max:120', Rule::unique('cloud_catalog_products', 'barcode')->where(fn ($q) => $q->where('store_id', $user->store_id))->ignore($productId)],
+            'sku' => ['required', 'string', 'max:80', Rule::unique('cloud_catalog_products', 'sku')->where(fn ($q) => $q->where('store_id', $store->id))->ignore($productId)],
+            'barcode' => ['nullable', 'string', 'max:120', Rule::unique('cloud_catalog_products', 'barcode')->where(fn ($q) => $q->where('store_id', $store->id))->ignore($productId)],
             'name' => ['required', 'string', 'max:160'],
             'price' => ['required', 'numeric', 'min:0'],
             'cost' => ['nullable', 'numeric', 'min:0'],

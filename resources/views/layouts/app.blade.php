@@ -71,6 +71,36 @@
             font-size: 28px;
             line-height: 1.05;
         }
+        .store-context {
+            display: grid;
+            gap: 12px;
+            background: rgba(255,255,255,.05);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 20px;
+            padding: 14px;
+        }
+        .store-context label {
+            color: #b5c5d4;
+            font-size: 12px;
+            margin: 0;
+        }
+        .store-context select {
+            background: rgba(255,255,255,.08);
+            color: #eef4f8;
+            border-color: rgba(255,255,255,.08);
+            padding: 12px 14px;
+            font-size: 14px;
+        }
+        .store-meta {
+            display: grid;
+            gap: 6px;
+            color: #d3dee8;
+            font-size: 13px;
+        }
+        .store-meta strong {
+            font-size: 18px;
+            color: #fff;
+        }
         .nav-section { display: grid; gap: 8px; }
         .nav-section span {
             font-size: 11px;
@@ -363,6 +393,27 @@
                 <small>BRS Cloud</small>
                 <strong>{{ auth()->user()->tenant?->name ?? 'BRS Cloud' }}</strong>
             </div>
+
+            @if (!empty($cloudActiveStore) && !empty($cloudAvailableStores))
+                <div class="store-context">
+                    <div class="store-meta">
+                        <span>Store activa</span>
+                        <strong>{{ $cloudActiveStore->name }}</strong>
+                        <span>{{ $cloudActiveStore->code }} · v{{ $cloudActiveStore->catalog_version }}</span>
+                    </div>
+                    <form method="POST" action="{{ route('context.store') }}">
+                        @csrf
+                        <label for="sidebar-store-selector">Cambiar contexto</label>
+                        <select id="sidebar-store-selector" name="store_id" onchange="this.form.submit()">
+                            @foreach ($cloudAvailableStores as $availableStore)
+                                <option value="{{ $availableStore->id }}" {{ (int) $availableStore->id === (int) $cloudActiveStore->id ? 'selected' : '' }}>
+                                    {{ $availableStore->name }} · {{ $availableStore->code }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </form>
+                </div>
+            @endif
 
             <div class="nav-section">
                 <span>Cloud</span>
