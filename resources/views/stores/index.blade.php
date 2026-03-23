@@ -27,7 +27,7 @@
         <div class="stat-note">Disponibles para check-in y sync</div>
     </article>
     <article class="stat">
-        <div class="stat-label">Devices</div>
+        <div class="stat-label">Cajas</div>
         <div class="stat-value">{{ $storeStats['devices'] }}</div>
         <div class="stat-note">Cajas asignadas a tus sucursales</div>
     </article>
@@ -61,7 +61,7 @@
                 <input id="name" name="name" value="{{ old('name', $editStore->name ?? '') }}" required>
             </div>
             <div class="field">
-                <label for="code">Codigo interno</label>
+                <label for="code">Codigo corto</label>
                 <input id="code" name="code" value="{{ old('code', $editStore->code ?? '') }}" required>
             </div>
             <div class="field">
@@ -78,7 +78,7 @@
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                 <div>
-                    <h4>Estado de la store</h4>
+                    <h4>Estado de la sucursal</h4>
                     <p>Desactiva una sucursal si quieres detener nuevas conexiones sin borrar su historial.</p>
                 </div>
                 <label style="margin: 0; display: flex; align-items: center; gap: 10px;">
@@ -108,28 +108,28 @@
                     <div class="toolbar" style="margin-bottom: 12px; align-items: flex-start;">
                         <div>
                             <h4>{{ $store->name }}</h4>
-                            <p>{{ $store->code }} · {{ $store->timezone }}</p>
+                            <p>{{ data_get($branding, 'business_name', $store->name) }} · {{ $store->timezone }}</p>
+                            <p class="muted">Referencia {{ $store->code }}</p>
                         </div>
                         <span class="pill {{ $store->is_active ? 'success' : 'danger' }}">{{ $store->is_active ? 'Activa' : 'Inactiva' }}</span>
                     </div>
                     <div class="grid grid-2" style="gap: 12px; margin-bottom: 14px;">
                         <div>
-                            <small class="eyebrow">Branding</small>
-                            <p>{{ data_get($branding, 'business_name', 'sin branding') }}</p>
-                            <p class="muted">Caja base: {{ data_get($branding, 'terminal_name', 'sin terminal') }}</p>
+                            <small class="eyebrow">Experiencia</small>
+                            <p>{{ data_get($branding, 'business_name', 'Sin nombre comercial') }}</p>
+                            <p class="muted">Caja sugerida: {{ data_get($branding, 'terminal_name', 'Sin nombre base') }}</p>
                         </div>
                         <div>
                             <small class="eyebrow">Operacion</small>
                             <p>{{ $deviceCounts[$store->id] ?? 0 }} cajas · {{ $catalogCounts[$store->id] ?? 0 }} productos</p>
-                            <p class="muted">Catalogo v{{ $store->catalog_version }}</p>
+                            <p class="muted">Catalogo version {{ $store->catalog_version }}</p>
                         </div>
                     </div>
                     <div class="row-actions">
-                        <code>{{ $store->api_key }}</code>
                         <a class="button-secondary" href="{{ route('stores.index', ['edit' => $store->id]) }}">Editar</a>
                         <form method="POST" action="{{ route('stores.rotate-key', $store->id) }}">
                             @csrf
-                            <button class="button-secondary" type="submit">Regenerar clave</button>
+                            <button class="button-secondary" type="submit">Renovar acceso de cajas</button>
                         </form>
                     </div>
                 </div>

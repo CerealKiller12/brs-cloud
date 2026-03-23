@@ -52,13 +52,13 @@
                 <select id="device_id" name="device_id">
                     <option value="">Todas las cajas</option>
                     @foreach ($deviceOptions as $option)
-                        <option value="{{ $option->device_id }}" {{ $deviceFilter === $option->device_id ? 'selected' : '' }}>{{ $option->name ?: $option->device_id }}</option>
+                        <option value="{{ $option->device_id }}" {{ $deviceFilter === $option->device_id ? 'selected' : '' }}>{{ $option->display_name }}</option>
                     @endforeach
                 </select>
             </div>
             <div class="field" style="grid-column: 1 / -1;">
                 <label for="event_type">Tipo de movimiento</label>
-                <input id="event_type" name="event_type" value="{{ $eventFilter }}" placeholder="sale.created, cash-session.opened, product.updated...">
+                <input id="event_type" name="event_type" value="{{ $eventFilter }}" placeholder="Venta registrada, caja abierta, producto actualizado...">
             </div>
             <div class="row-actions" style="grid-column: 1 / -1;">
                 <button class="button-secondary" type="submit">Aplicar filtros</button>
@@ -77,7 +77,7 @@
             @forelse ($topEventTypes as $row)
                 <div class="surface" style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                     <div>
-                        <strong>{{ $row->event_type }}</strong>
+                        <strong>{{ $row->display_label }}</strong>
                         <p>Movimiento recurrente entre cajas y catalogo compartido</p>
                     </div>
                     <span class="pill">{{ $row->aggregate }}</span>
@@ -94,36 +94,26 @@
         <thead>
             <tr>
                 <th>Movimiento</th>
-                <th>Origen</th>
+                <th>Sucursal</th>
                 <th>Caja</th>
                 <th>Resultado</th>
-                <th>Detalle</th>
+                <th>Resumen</th>
                 <th>Recibido</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($events as $event)
-                @php($payload = json_decode($event->payload_json, true) ?: [])
                 @php($statusClass = $event->apply_error ? 'danger' : ($event->applied_at ? 'success' : ''))
                 @php($statusLabel = $event->apply_error ? 'Necesita revision' : ($event->applied_at ? 'Aplicado' : 'Pendiente'))
-                @php($eventLabel = match ($event->event_type) {
-                    'product.created' => 'Producto creado',
-                    'product.updated' => 'Producto actualizado',
-                    'product.deleted' => 'Producto eliminado',
-                    'product.stock-adjusted' => 'Stock ajustado',
-                    'sale.created' => 'Venta registrada',
-                    default => \Illuminate\Support\Str::headline(str_replace('.', ' ', $event->event_type)),
-                })
                 <tr>
                     <td>
-                        <strong>{{ $eventLabel }}</strong><br>
-                        <span class="muted">{{ $event->event_id }}</span>
+                        <strong>{{ $event->event_label }}</strong><br>
+                        <span class="muted">{{ $event->aggregate_label }}</span>
                     </td>
                     <td>
-                        <strong>{{ $event->store_id }}</strong><br>
-                        <span class="muted">{{ \Illuminate\Support\Str::headline(str_replace('-', ' ', $event->aggregate_type)) }}</span>
+                        <strong>{{ $event->store_name }}</strong>
                     </td>
-                    <td>{{ $event->device_id }}</td>
+                    <td>{{ $event->device_label }}</td>
                     <td>
                         <span class="pill {{ $statusClass }}">{{ $statusLabel }}</span>
                         @if ($event->apply_error)
@@ -133,7 +123,7 @@
                         @endif
                     </td>
                     <td>
-                        <span class="muted">{{ \Illuminate\Support\Str::limit(json_encode($payload), 96) }}</span>
+                        <span class="muted">{{ $event->detail_label }}</span>
                     </td>
                     <td>{{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</td>
                 </tr>

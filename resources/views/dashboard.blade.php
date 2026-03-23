@@ -21,8 +21,9 @@
     <small>Resumen de la sucursal activa</small>
     <h1>{{ $tenant->name ?? 'BRS Cloud' }}</h1>
     <p>
-        Sucursal actual {{ $store->name ?? 'sin sucursal' }} · Plan {{ $tenant->plan_code ?? 'n/a' }} ·
-        Estado {{ $tenant->subscription_status ?? 'n/a' }}
+        Sucursal actual {{ $store->name ?? 'sin sucursal' }} ·
+        Catalogo version {{ $store->catalog_version ?? 0 }} ·
+        {{ $stats['onlineDevices'] }} caja(s) activas en este momento
     </p>
 </section>
 
@@ -65,7 +66,7 @@
                 @foreach ($recentDevices as $device)
                     <div class="meta-row">
                         <div>
-                            <strong>{{ $device->name ?: $device->device_id }}</strong><br>
+                            <strong>{{ $device->name ?: ($device->platform === 'ios' ? 'Caja iPad' : ($device->platform === 'desktop' ? 'Caja de escritorio' : 'Caja conectada')) }}</strong><br>
                             <span class="muted">{{ strtoupper($device->platform ?: 'n/a') }} · {{ $device->app_mode ?: 'sin modo' }}</span>
                         </div>
                         <div class="muted">{{ optional($device->last_seen_at)->format('M j, Y · g:i A') ?: 'Sin actividad reciente' }}</div>
@@ -90,16 +91,8 @@
                 @foreach ($recentEvents as $event)
                     <div class="meta-row">
                         <div>
-                            @php($eventLabel = match ($event->event_type) {
-                                'product.created' => 'Producto creado',
-                                'product.updated' => 'Producto actualizado',
-                                'product.deleted' => 'Producto eliminado',
-                                'product.stock-adjusted' => 'Stock ajustado',
-                                'sale.created' => 'Venta registrada',
-                                default => \Illuminate\Support\Str::headline(str_replace('.', ' ', $event->event_type)),
-                            })
-                            <strong>{{ $eventLabel }}</strong><br>
-                            <span class="muted">{{ $event->device_id }} · {{ \Illuminate\Support\Str::headline(str_replace('-', ' ', $event->aggregate_type)) }}</span>
+                            <strong>{{ $event->event_label }}</strong><br>
+                            <span class="muted">{{ $event->device_label }} · {{ $event->detail_label }}</span>
                         </div>
                         <div class="muted">{{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</div>
                     </div>

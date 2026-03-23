@@ -6,6 +6,7 @@ use App\Models\Store;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -62,6 +63,84 @@ $bumpCatalogVersion = function (int $storeId): int {
     DB::table('stores')->where('id', $storeId)->increment('catalog_version');
 
     return (int) DB::table('stores')->where('id', $storeId)->value('catalog_version');
+};
+
+$humanizeEventType = function (?string $eventType): string {
+    return match ($eventType) {
+        'product.created' => 'Producto agregado',
+        'product.updated' => 'Producto actualizado',
+        'product.deleted' => 'Producto eliminado',
+        'product.stock-adjusted' => 'Stock ajustado',
+        'sale.created' => 'Venta registrada',
+        'cash-session.opened' => 'Caja abierta',
+        'cash-session.closed' => 'Caja cerrada',
+        default => Str::headline(str_replace(['.', '-'], ' ', (string) $eventType)),
+    };
+};
+
+$humanizeAggregateType = function (?string $aggregateType): string {
+    return match ($aggregateType) {
+        'sale' => 'Venta',
+        'product' => 'Catalogo',
+        'cash-session', 'cash_session' => 'Caja',
+        default => Str::headline(str_replace(['.', '-'], ' ', (string) $aggregateType)),
+    };
+};
+
+$humanizeDeviceLabel = function (?string $deviceId, ?string $deviceName = null, ?string $platform = null): string {
+    if (filled($deviceName)) {
+        return $deviceName;
+    }
+
+    if (!$deviceId) {
+        return 'Caja sin nombre';
+    }
+
+    if ($platform === 'ios' || str_starts_with($deviceId, 'ipad-')) {
+        return 'Caja iPad';
+    }
+
+    if ($platform === 'desktop' || str_starts_with($deviceId, 'desktop-')) {
+        return 'Caja de escritorio';
+    }
+
+    return 'Caja conectada';
+};
+
+$describeSyncEvent = function (?string $eventType, array $payload): string {
+    $sku = trim((string) ($payload['sku'] ?? ''));
+    $name = trim((string) ($payload['name'] ?? ''));
+    $folio = trim((string) ($payload['folio'] ?? data_get($payload, 'sale.folio', '')));
+    $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+    $itemsCount = is_countable($items) ? count($items) : 0;
+    $stockOnHand = $payload['stockOnHand'] ?? null;
+
+    return match ($eventType) {
+        'sale.created' => $folio !== ''
+            ? "Ticket {$folio}".($itemsCount > 0 ? " · {$itemsCount} producto(s)" : '')
+            : ($itemsCount > 0 ? "{$itemsCount} producto(s) cobrados" : 'Venta enviada desde caja'),
+        'product.stock-adjusted' => trim(collect([
+            $name !== '' ? $name : null,
+            $sku !== '' ? "SKU {$sku}" : null,
+            is_numeric($stockOnHand) ? "stock actual {$stockOnHand}" : null,
+        ])->filter()->implode(' · ')) ?: 'Movimiento de inventario',
+        'product.created', 'product.updated' => trim(collect([
+            $name !== '' ? $name : null,
+            $sku !== '' ? "SKU {$sku}" : null,
+        ])->filter()->implode(' · ')) ?: 'Cambio en catalogo',
+        'product.deleted' => trim(collect([
+            $name !== '' ? $name : null,
+            $sku !== '' ? "SKU {$sku}" : null,
+            'eliminado del catalogo',
+        ])->filter()->implode(' · ')) ?: 'Producto retirado del catalogo',
+        'cash-session.opened' => 'Inicio de caja registrado',
+        'cash-session.closed' => 'Cierre de caja registrado',
+        default => trim(collect([
+            $name !== '' ? $name : null,
+            $sku !== '' ? "SKU {$sku}" : null,
+            $folio !== '' ? "Ticket {$folio}" : null,
+        ])->filter()->implode(' · ')) ?: 'Movimiento recibido desde una caja',
+    };
 };
 
 $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $initialCatalogVersion) {
@@ -172,7 +251,7 @@ Route::middleware('guest')->group(function () {
     })->name('login.submit');
 });
 
-Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion, $streamCatalogVersionEvents) {
+Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
@@ -370,6 +449,23 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->latest('received_at')
             ->limit(8)
             ->get();
+
+        $recentEventDeviceMeta = Device::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('device_id', $recentEvents->pluck('device_id')->filter()->unique()->values())
+            ->get(['device_id', 'name', 'platform'])
+            ->keyBy('device_id');
+
+        $recentEvents = $recentEvents->map(function ($event) use ($recentEventDeviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+            $deviceMeta = $recentEventDeviceMeta->get($event->device_id);
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $event->device_label = $humanizeDeviceLabel($event->device_id, $deviceMeta->name ?? null, $deviceMeta->platform ?? null);
+            $event->event_label = $humanizeEventType($event->event_type);
+            $event->aggregate_label = $humanizeAggregateType($event->aggregate_type);
+            $event->detail_label = $describeSyncEvent($event->event_type, $payload);
+
+            return $event;
+        });
 
         return view('dashboard', compact('user', 'tenant', 'store', 'stats', 'recentDevices', 'recentEvents'));
     })->name('dashboard');
@@ -625,7 +721,12 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->groupBy('event_type')
             ->orderByDesc('aggregate')
             ->limit(4)
-            ->get();
+            ->get()
+            ->map(function ($row) use ($humanizeEventType) {
+                $row->display_label = $humanizeEventType($row->event_type);
+
+                return $row;
+            });
 
         $events = (clone $baseQuery)
             ->latest('received_at')
@@ -636,12 +737,38 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->where('tenant_id', $user->tenant_id)
             ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
             ->orderBy('name')
-            ->get(['device_id', 'name']);
+            ->get(['device_id', 'name', 'platform'])
+            ->map(function ($device) use ($humanizeDeviceLabel) {
+                $device->display_name = $humanizeDeviceLabel($device->device_id, $device->name ?? null, $device->platform ?? null);
+
+                return $device;
+            });
 
         $storeOptions = Store::query()
             ->where('tenant_id', $user->tenant_id)
             ->orderBy('name')
             ->get(['id', 'name']);
+
+        $storeNames = $storeOptions->pluck('name', 'id');
+        $deviceMeta = Device::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->whereIn('device_id', $events->getCollection()->pluck('device_id')->filter()->unique()->values())
+            ->get(['device_id', 'name', 'platform'])
+            ->keyBy('device_id');
+
+        $events->setCollection(
+            $events->getCollection()->map(function ($event) use ($storeNames, $deviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+                $payload = json_decode($event->payload_json, true) ?: [];
+                $meta = $deviceMeta->get($event->device_id);
+                $event->store_name = $storeNames[$event->store_id] ?? 'Sucursal sin nombre';
+                $event->device_label = $humanizeDeviceLabel($event->device_id, $meta->name ?? null, $meta->platform ?? null);
+                $event->event_label = $humanizeEventType($event->event_type);
+                $event->aggregate_label = $humanizeAggregateType($event->aggregate_type);
+                $event->detail_label = $describeSyncEvent($event->event_type, $payload);
+
+                return $event;
+            })
+        );
 
         return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes'));
     })->name('sync.index');

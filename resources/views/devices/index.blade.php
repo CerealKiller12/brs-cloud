@@ -86,15 +86,15 @@
                 @php($healthLabel = $isOnline ? 'En linea' : ($isRecent ? 'Reciente' : 'Atrasada'))
                 <tr>
                     <td>
-                        <strong>{{ $device->name ?: $device->device_id }}</strong><br>
-                        <span class="muted">{{ $device->device_id }} · {{ strtoupper($device->platform ?: 'n/a') }}</span>
+                        <strong>{{ $device->name ?: ($device->platform === 'ios' ? 'Caja iPad' : ($device->platform === 'desktop' ? 'Caja de escritorio' : 'Caja conectada')) }}</strong><br>
+                        <span class="muted">{{ strtoupper($device->platform ?: 'n/a') }} · {{ $device->app_mode ?: 'sin modo' }}</span>
                     </td>
                     <td>
                         <span class="pill {{ $healthClass }}">{{ $healthLabel }}</span><br>
                         <span class="muted">{{ ($tokenCounts[$device->id] ?? 0) > 0 ? 'Token activo' : 'Sin token' }}</span>
                     </td>
                     <td>{{ $storeNames[$device->store_id] ?? 'Sin sucursal' }}</td>
-                    <td>{{ $device->app_mode ?: 'sin modo' }}</td>
+                    <td>{{ $device->platform === 'ios' ? 'iPad / iPhone' : ($device->platform === 'desktop' ? 'Escritorio' : ($device->platform ?: 'Sin definir')) }}</td>
                     <td>{{ $device->current_version ?: 'n/a' }}</td>
                     <td>
                         <strong>{{ $health->total_events ?? 0 }} movimientos</strong><br>
