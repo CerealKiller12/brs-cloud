@@ -409,10 +409,10 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
     $accepted = [];
 
     foreach ($payload['events'] as $event) {
-        $alreadyProcessed = DB::table('sync_events')
+        $existingSyncEvent = DB::table('sync_events')
             ->where('store_id', $store->store_row_id)
             ->where('event_id', $event['event_id'])
-            ->exists();
+            ->first();
 
         DB::table('sync_events')->updateOrInsert(
             [
@@ -430,105 +430,127 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 'received_at' => now(),
                 'updated_at' => now(),
                 'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+                'apply_error' => null,
             ]
         );
 
-        if ($alreadyProcessed) {
+        if ($existingSyncEvent?->applied_at) {
             $accepted[] = $event['event_id'];
             continue;
         }
 
-        $eventPayload = $event['payload'];
+        try {
+            $eventPayload = $event['payload'];
 
-        if (in_array($event['event_type'], ['product.created', 'product.updated'], true)) {
-            $sku = trim((string) ($eventPayload['sku'] ?? ''));
+            if (in_array($event['event_type'], ['product.created', 'product.updated'], true)) {
+                $sku = trim((string) ($eventPayload['sku'] ?? ''));
 
-            if ($sku !== '') {
+                if ($sku !== '') {
+                    $existingProduct = $findCatalogProduct($eventPayload);
+                    $catalogVersion = $nextCatalogVersion();
+                    $attributes = [
+                        'store_id' => $store->store_row_id,
+                        'sku' => $sku,
+                        'barcode' => ($eventPayload['barcode'] ?? null) ?: null,
+                        'name' => trim((string) ($eventPayload['name'] ?? $sku)),
+                        'price_cents' => (int) ($eventPayload['priceCents'] ?? 0),
+                        'cost_cents' => (int) ($eventPayload['costCents'] ?? 0),
+                        'stock_on_hand' => (int) round($eventPayload['stockOnHand'] ?? ($existingProduct->stock_on_hand ?? 0)),
+                        'reorder_point' => (int) round($eventPayload['reorderPoint'] ?? 0),
+                        'track_inventory' => (bool) ($eventPayload['trackInventory'] ?? true),
+                        'is_active' => true,
+                        'catalog_version' => $catalogVersion,
+                        'metadata_json' => json_encode([
+                            'source' => 'sync-event',
+                            'last_event_type' => $event['event_type'],
+                            'last_device_id' => $payload['device_id'],
+                        ]),
+                        'updated_at' => now(),
+                    ];
+
+                    if ($existingProduct) {
+                        DB::table('cloud_catalog_products')
+                            ->where('id', $existingProduct->id)
+                            ->update($attributes);
+                    } else {
+                        DB::table('cloud_catalog_products')->insert([
+                            ...$attributes,
+                            'created_at' => now(),
+                        ]);
+                    }
+                }
+            }
+
+            if ($event['event_type'] === 'product.stock-adjusted') {
                 $existingProduct = $findCatalogProduct($eventPayload);
-                $catalogVersion = $nextCatalogVersion();
-                $attributes = [
-                    'store_id' => $store->store_row_id,
-                    'sku' => $sku,
-                    'barcode' => ($eventPayload['barcode'] ?? null) ?: null,
-                    'name' => trim((string) ($eventPayload['name'] ?? $sku)),
-                    'price_cents' => (int) ($eventPayload['priceCents'] ?? 0),
-                    'cost_cents' => (int) ($eventPayload['costCents'] ?? 0),
-                    'stock_on_hand' => (int) round($eventPayload['stockOnHand'] ?? ($existingProduct->stock_on_hand ?? 0)),
-                    'reorder_point' => (int) round($eventPayload['reorderPoint'] ?? 0),
-                    'track_inventory' => (bool) ($eventPayload['trackInventory'] ?? true),
-                    'is_active' => true,
-                    'catalog_version' => $catalogVersion,
-                    'metadata_json' => json_encode([
-                        'source' => 'sync-event',
-                        'last_event_type' => $event['event_type'],
-                        'last_device_id' => $payload['device_id'],
-                    ]),
-                    'updated_at' => now(),
-                ];
 
                 if ($existingProduct) {
+                    $catalogVersion = $nextCatalogVersion();
+
                     DB::table('cloud_catalog_products')
                         ->where('id', $existingProduct->id)
-                        ->update($attributes);
-                } else {
-                    DB::table('cloud_catalog_products')->insert([
-                        ...$attributes,
-                        'created_at' => now(),
-                    ]);
+                        ->update([
+                            'barcode' => ($eventPayload['barcode'] ?? $existingProduct->barcode) ?: null,
+                            'stock_on_hand' => (int) round($eventPayload['stockOnHand'] ?? $existingProduct->stock_on_hand),
+                            'catalog_version' => $catalogVersion,
+                            'updated_at' => now(),
+                        ]);
                 }
             }
-        }
 
-        if ($event['event_type'] === 'product.stock-adjusted') {
-            $existingProduct = $findCatalogProduct($eventPayload);
+            if ($event['event_type'] === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
+                $catalogVersion = null;
 
-            if ($existingProduct) {
-                $catalogVersion = $nextCatalogVersion();
+                foreach ($eventPayload['items'] as $item) {
+                    $sku = trim((string) ($item['productSku'] ?? ''));
+                    $quantity = (int) round($item['quantity'] ?? 0);
 
-                DB::table('cloud_catalog_products')
-                    ->where('id', $existingProduct->id)
-                    ->update([
-                        'barcode' => ($eventPayload['barcode'] ?? $existingProduct->barcode) ?: null,
-                        'stock_on_hand' => (int) round($eventPayload['stockOnHand'] ?? $existingProduct->stock_on_hand),
-                        'catalog_version' => $catalogVersion,
-                        'updated_at' => now(),
-                    ]);
-            }
-        }
+                    if ($sku === '' || $quantity <= 0) {
+                        continue;
+                    }
 
-        if ($event['event_type'] === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
-            $catalogVersion = null;
+                    $catalogProduct = DB::table('cloud_catalog_products')
+                        ->where('store_id', $store->store_row_id)
+                        ->where('sku', $sku)
+                        ->first();
 
-            foreach ($eventPayload['items'] as $item) {
-                $sku = trim((string) ($item['productSku'] ?? ''));
-                $quantity = (int) round($item['quantity'] ?? 0);
+                    if (!$catalogProduct || !(bool) $catalogProduct->track_inventory) {
+                        continue;
+                    }
 
-                if ($sku === '' || $quantity <= 0) {
-                    continue;
+                    $catalogVersion ??= $nextCatalogVersion();
+
+                    DB::table('cloud_catalog_products')
+                        ->where('id', $catalogProduct->id)
+                        ->update([
+                            'stock_on_hand' => max(0, (int) $catalogProduct->stock_on_hand - $quantity),
+                            'catalog_version' => $catalogVersion,
+                            'updated_at' => now(),
+                        ]);
                 }
-
-                $catalogProduct = DB::table('cloud_catalog_products')
-                    ->where('store_id', $store->store_row_id)
-                    ->where('sku', $sku)
-                    ->first();
-
-                if (!$catalogProduct || !(bool) $catalogProduct->track_inventory) {
-                    continue;
-                }
-
-                $catalogVersion ??= $nextCatalogVersion();
-
-                DB::table('cloud_catalog_products')
-                    ->where('id', $catalogProduct->id)
-                    ->update([
-                        'stock_on_hand' => max(0, (int) $catalogProduct->stock_on_hand - $quantity),
-                        'catalog_version' => $catalogVersion,
-                        'updated_at' => now(),
-                    ]);
             }
-        }
 
-        $accepted[] = $event['event_id'];
+            DB::table('sync_events')
+                ->where('store_id', $store->store_row_id)
+                ->where('event_id', $event['event_id'])
+                ->update([
+                    'applied_at' => now(),
+                    'apply_error' => null,
+                    'updated_at' => now(),
+                ]);
+
+            $accepted[] = $event['event_id'];
+        } catch (Throwable $exception) {
+            report($exception);
+
+            DB::table('sync_events')
+                ->where('store_id', $store->store_row_id)
+                ->where('event_id', $event['event_id'])
+                ->update([
+                    'apply_error' => mb_substr($exception->getMessage(), 0, 1000),
+                    'updated_at' => now(),
+                ]);
+        }
     }
 
     return response()->json([
