@@ -919,6 +919,20 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->orderBy('name');
 
         $catalog = $catalogQuery->paginate(20)->withQueryString();
+        $catalogStats = [
+            'total' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->count(),
+            'active' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->where('is_active', true)->count(),
+            'inactive' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->where('is_active', false)->count(),
+            'lowStock' => DB::table('cloud_catalog_products')
+                ->where('store_id', $store->id)
+                ->where('is_active', true)
+                ->where('track_inventory', true)
+                ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+                ->count(),
+            'lastUpdatedAt' => DB::table('cloud_catalog_products')
+                ->where('store_id', $store->id)
+                ->max('updated_at'),
+        ];
 
         $editProduct = null;
         if ($editId) {
@@ -930,6 +944,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         return view('catalog.index', [
             'catalog' => $catalog,
+            'catalogStats' => $catalogStats,
             'editProduct' => $editProduct,
             'store' => $store,
             'search' => $search,
