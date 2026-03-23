@@ -404,7 +404,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('dashboard')->with('status', 'Onboarding inicial completado.');
     })->name('onboarding.store');
 
-    Route::get('/dashboard', function () use ($resolveStoreForUser) {
+    Route::get('/dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
         /** @var User $user */
         $user = Auth::user();
         $tenantId = $user->tenant_id;
@@ -693,7 +693,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route('devices.index')->with('status', 'Tokens del device revocados.');
     })->name('devices.revoke-token');
 
-    Route::get('/sync', function (Request $request) use ($resolveStoreForUser) {
+    Route::get('/sync', function (Request $request) use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
         /** @var User $user */
         $user = Auth::user();
         $activeStore = $resolveStoreForUser($user);
