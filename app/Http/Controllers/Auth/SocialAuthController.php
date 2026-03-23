@@ -23,7 +23,7 @@ class SocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $returnTo = trim((string) $request->query('return_to', ''));
+        $returnTo = $this->normalizeAppReturnTo(trim((string) $request->query('return_to', '')));
 
         if ($this->isAllowedAppReturnTo($returnTo)) {
             $request->session()->put('social_return_to', $returnTo);
@@ -51,7 +51,7 @@ class SocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $returnTo = $request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', ''));
+        $returnTo = $this->normalizeAppReturnTo($request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', '')));
 
         try {
             $socialUser = Socialite::driver($provider)->user();
@@ -119,6 +119,24 @@ class SocialAuthController extends Controller
 
             throw $exception;
         }
+    }
+
+    private function normalizeAppReturnTo(?string $returnTo): string
+    {
+        if (! is_string($returnTo) || $returnTo === '') {
+            return '';
+        }
+
+        $parts = parse_url($returnTo);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $path = '/'.ltrim((string) ($parts['path'] ?? ''), '/');
+
+        if ($scheme === 'capacitor' && $host === 'localhost' && $path === '/cloud-tenant') {
+            return 'brspos://cloud-tenant';
+        }
+
+        return trim($returnTo);
     }
 
     private function isAllowedAppReturnTo(?string $returnTo): bool
