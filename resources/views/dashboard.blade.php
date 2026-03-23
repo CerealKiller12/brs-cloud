@@ -1,6 +1,22 @@
 @extends('layouts.app', ['title' => 'Dashboard | BRS Cloud'])
 
 @section('content')
+@if (session('status'))
+<section class="notice success">{{ session('status') }}</section>
+@endif
+
+@if (!($tenant?->onboarding_completed_at))
+<section class="card">
+    <div class="toolbar">
+        <div>
+            <small class="eyebrow">Onboarding</small>
+            <h3>Completa la configuracion inicial</h3>
+            <p>Define negocio, branding base y store principal antes de conectar mas cajas.</p>
+        </div>
+        <a class="button" href="{{ route('onboarding.index') }}">Completar onboarding</a>
+    </div>
+</section>
+@endif
 <section class="hero">
     <small>Tenant</small>
     <h1>{{ $tenant->name ?? 'BRS Cloud' }}</h1>

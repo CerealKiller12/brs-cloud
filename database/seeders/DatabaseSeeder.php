@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
                 'subscription_status' => 'active',
                 'is_active' => true,
                 'trial_ends_at' => null,
+                'onboarding_completed_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]

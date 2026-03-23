@@ -13,6 +13,7 @@ class Tenant extends Model
         'plan_code',
         'subscription_status',
         'trial_ends_at',
+        'onboarding_completed_at',
         'is_active',
     ];
 
@@ -20,6 +21,7 @@ class Tenant extends Model
     {
         return [
             'trial_ends_at' => 'datetime',
+            'onboarding_completed_at' => 'datetime',
             'is_active' => 'boolean',
         ];
     }

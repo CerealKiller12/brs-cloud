@@ -68,7 +68,9 @@ class SocialAuthController extends Controller
         Auth::login($user, true);
         request()->session()->regenerate();
 
-        return redirect()->route('dashboard');
+        return $user->tenant?->onboarding_completed_at
+            ? redirect()->route('dashboard')
+            : redirect()->route('onboarding.index');
     }
 
     private function provisionOwnerFromSocialUser(

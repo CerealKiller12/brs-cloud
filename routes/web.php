@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\SocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -54,7 +55,9 @@ Route::middleware('guest')->group(function () {
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        $user = Auth::user();
+
+        return redirect()->intended($user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index'));
     })->name('login.submit');
 });
 
@@ -66,6 +69,133 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         return redirect()->route('login');
     })->name('logout');
+
+
+    Route::get('/settings', function () {
+        /** @var User $user */
+        $user = Auth::user();
+        $tenant = Tenant::query()->findOrFail($user->tenant_id);
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        return view('settings', compact('user', 'tenant', 'store', 'branding'));
+    })->name('settings.index');
+
+    Route::post('/settings/account', function (Request $request) {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $payload = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'avatar_url' => ['nullable', 'url', 'max:500'],
+        ]);
+
+        $user->update([
+            'name' => $payload['name'],
+            'avatar_url' => $payload['avatar_url'] ?: null,
+        ]);
+
+        return redirect()->route('settings.index')->with('status', 'Cuenta cloud actualizada.');
+    })->name('settings.account');
+
+    Route::post('/settings/tenant', function (Request $request) {
+        /** @var User $user */
+        $user = Auth::user();
+        $tenant = Tenant::query()->findOrFail($user->tenant_id);
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        $payload = $request->validate([
+            'tenant_name' => ['required', 'string', 'max:120'],
+            'business_name' => ['required', 'string', 'max:160'],
+        ]);
+
+        $tenant->update([
+            'name' => $payload['tenant_name'],
+        ]);
+
+        $branding['business_name'] = $payload['business_name'];
+        $store->update([
+            'branding_json' => $branding,
+        ]);
+
+        return redirect()->route('settings.index')->with('status', 'Negocio cloud actualizado.');
+    })->name('settings.tenant');
+
+    Route::post('/settings/store', function (Request $request) {
+        /** @var User $user */
+        $user = Auth::user();
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        $payload = $request->validate([
+            'store_name' => ['required', 'string', 'max:120'],
+            'timezone' => ['required', 'string', 'max:60'],
+            'terminal_name' => ['required', 'string', 'max:120'],
+        ]);
+
+        $branding['terminal_name'] = $payload['terminal_name'];
+
+        $store->update([
+            'name' => $payload['store_name'],
+            'timezone' => $payload['timezone'],
+            'branding_json' => $branding,
+        ]);
+
+        return redirect()->route('settings.index')->with('status', 'Store principal actualizada.');
+    })->name('settings.store');
+
+    Route::get('/onboarding', function () {
+        /** @var User $user */
+        $user = Auth::user();
+        $tenant = Tenant::query()->findOrFail($user->tenant_id);
+
+        if ($tenant->onboarding_completed_at) {
+            return redirect()->route('dashboard');
+        }
+
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        return view('onboarding', compact('user', 'tenant', 'store', 'branding'));
+    })->name('onboarding.index');
+
+    Route::post('/onboarding', function (Request $request) {
+        /** @var User $user */
+        $user = Auth::user();
+        $tenant = Tenant::query()->findOrFail($user->tenant_id);
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        $payload = $request->validate([
+            'tenant_name' => ['required', 'string', 'max:120'],
+            'business_name' => ['required', 'string', 'max:160'],
+            'store_name' => ['required', 'string', 'max:120'],
+            'terminal_name' => ['required', 'string', 'max:120'],
+            'timezone' => ['required', 'string', 'max:60'],
+            'owner_name' => ['required', 'string', 'max:120'],
+        ]);
+
+        $tenant->update([
+            'name' => $payload['tenant_name'],
+            'onboarding_completed_at' => now(),
+        ]);
+
+        $branding['business_name'] = $payload['business_name'];
+        $branding['terminal_name'] = $payload['terminal_name'];
+
+        $store->update([
+            'name' => $payload['store_name'],
+            'timezone' => $payload['timezone'],
+            'branding_json' => $branding,
+        ]);
+
+        $user->update([
+            'name' => $payload['owner_name'],
+        ]);
+
+        return redirect()->route('dashboard')->with('status', 'Onboarding inicial completado.');
+    })->name('onboarding.store');
 
     Route::get('/dashboard', function () {
         /** @var User $user */
