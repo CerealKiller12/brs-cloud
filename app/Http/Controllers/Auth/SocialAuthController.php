@@ -27,8 +27,21 @@ class SocialAuthController extends Controller
 
         if ($this->isAllowedAppReturnTo($returnTo)) {
             $request->session()->put('social_return_to', $returnTo);
+
+            cookie()->queue(cookie(
+                'brs_social_return_to',
+                $returnTo,
+                15,
+                '/',
+                null,
+                true,
+                false,
+                false,
+                'lax',
+            ));
         } else {
             $request->session()->forget('social_return_to');
+            cookie()->queue(cookie()->forget('brs_social_return_to'));
         }
 
         return Socialite::driver($provider)->redirect();
@@ -38,7 +51,7 @@ class SocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $returnTo = $request->session()->pull('social_return_to');
+        $returnTo = $request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', ''));
 
         try {
             $socialUser = Socialite::driver($provider)->user();
@@ -84,6 +97,8 @@ class SocialAuthController extends Controller
             if ($this->isAllowedAppReturnTo($returnTo)) {
                 $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
 
+                cookie()->queue(cookie()->forget('brs_social_return_to'));
+
                 return $this->redirectBackToApp($returnTo, [
                     'cloud_token' => $token,
                     'cloud_provider' => $provider,
@@ -95,6 +110,8 @@ class SocialAuthController extends Controller
                 : redirect()->route('onboarding.index');
         } catch (Throwable $exception) {
             if ($this->isAllowedAppReturnTo($returnTo)) {
+                cookie()->queue(cookie()->forget('brs_social_return_to'));
+
                 return $this->redirectBackToApp($returnTo, [
                     'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de BRS Cloud.',
                 ]);
