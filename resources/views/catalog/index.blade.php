@@ -87,11 +87,17 @@
     </article>
 </section>
 
-<section class="card">
+<section
+    class="card"
+    data-cloud-catalog-live
+    data-catalog-version="{{ (int) $store->catalog_version }}"
+    data-store-id="{{ (int) $store->id }}"
+    data-status-url="{{ route('catalog.status', ['store_id' => $store->id]) }}">
     <div class="toolbar">
         <div>
             <small class="eyebrow">Inventario cloud</small>
             <h3>Snapshot actual</h3>
+            <p class="muted" data-live-status style="margin-top: 6px;">Actualizacion automatica activa.</p>
         </div>
         <form method="GET" action="{{ route('catalog.index') }}" style="display: flex; gap: 10px; align-items: center;">
             <input name="q" value="{{ $search }}" placeholder="Buscar por nombre, SKU o barcode" style="width: 320px;">
@@ -155,4 +161,78 @@
 
     <div class="pagination">{{ $catalog->links() }}</div>
 </section>
+
+<script>
+(() => {
+    const root = document.querySelector('[data-cloud-catalog-live]');
+
+    if (!root) {
+        return;
+    }
+
+    let currentVersion = Number(root.dataset.catalogVersion || '0');
+    const statusUrl = root.dataset.statusUrl || '';
+    const liveStatus = root.querySelector('[data-live-status]');
+    let polling = false;
+
+    const setStatus = (text) => {
+        if (liveStatus) {
+            liveStatus.textContent = text;
+        }
+    };
+
+    const checkCatalogVersion = async () => {
+        if (polling || !statusUrl || document.visibilityState === 'hidden') {
+            return;
+        }
+
+        polling = true;
+
+        try {
+            const response = await fetch(statusUrl, {
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                setStatus('No pude revisar cambios del snapshot cloud.');
+                return;
+            }
+
+            const payload = await response.json();
+            const nextVersion = Number(payload.catalogVersion || 0);
+
+            if (nextVersion > currentVersion) {
+                setStatus(`Aplicando cambios del snapshot v${nextVersion}...`);
+                window.location.reload();
+                return;
+            }
+
+            setStatus(`Snapshot al dia en v${currentVersion}.`);
+        } catch {
+            setStatus('No pude revisar cambios del snapshot cloud.');
+        } finally {
+            polling = false;
+        }
+    };
+
+    window.setInterval(() => {
+        void checkCatalogVersion();
+    }, 10000);
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            void checkCatalogVersion();
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        void checkCatalogVersion();
+    });
+})();
+</script>
 @endsection

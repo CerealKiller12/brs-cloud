@@ -597,6 +597,19 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         ]);
     })->name('catalog.index');
 
+    Route::get('/catalog/status', function (Request $request) use ($resolveStoreForUser) {
+        /** @var User $user */
+        $user = Auth::user();
+        $store = $resolveStoreForUser($user, $request->integer('store_id'));
+
+        return response()->json([
+            'storeId' => $store->id,
+            'storeCode' => $store->code,
+            'catalogVersion' => (int) $store->catalog_version,
+            'checkedAt' => now()->toIso8601String(),
+        ]);
+    })->name('catalog.status');
+
     Route::post('/catalog', function (Request $request) use ($bumpCatalogVersion, $resolveStoreForUser) {
         /** @var User $user */
         $user = Auth::user();
