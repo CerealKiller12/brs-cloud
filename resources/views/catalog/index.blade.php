@@ -123,11 +123,24 @@
                     <td><span class="pill">{{ $item->is_active ? 'Activo' : 'Inactivo' }}</span></td>
                     <td>v{{ $item->catalog_version }}</td>
                     <td>
-                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center;">
                             <a class="pill" href="{{ route('catalog.index', ['edit' => $item->id] + ($search ? ['q' => $search] : [])) }}">Editar</a>
                             <form method="POST" action="{{ route('catalog.toggle', $item->id) }}">
                                 @csrf
                                 <button class="pill" type="submit" style="cursor: pointer;">{{ $item->is_active ? 'Desactivar' : 'Activar' }}</button>
+                            </form>
+                            <form method="POST" action="{{ route('catalog.destroy', $item->id) }}" onsubmit="return confirm('Se eliminara {{ addslashes($item->name) }} del catalogo cloud. ¿Continuar?')">
+                                @csrf
+                                @method('DELETE')
+                                <button
+                                    type="submit"
+                                    aria-label="Eliminar producto"
+                                    title="Eliminar producto"
+                                    style="width: 34px; height: 34px; display: inline-grid; place-items: center; border-radius: 999px; border: 1px solid #e8c4bc; background: #fff1ee; color: #ae4c3b; cursor: pointer;">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; fill: currentColor;">
+                                        <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v8H8V9Zm6 0h2v8h-2V9ZM7 9h10l-.8 10.2A2 2 0 0 1 14.2 21H9.8a2 2 0 0 1-1.99-1.8L7 9Z" />
+                                    </svg>
+                                </button>
                             </form>
                         </div>
                     </td>

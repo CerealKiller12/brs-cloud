@@ -597,4 +597,26 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ((bool) $product->is_active ? 'Producto desactivado' : 'Producto reactivado').' en el catalogo cloud.'
         );
     })->name('catalog.toggle');
+
+    Route::delete('/catalog/{productId}', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
+        /** @var User $user */
+        $user = Auth::user();
+        $store = $resolveStoreForUser($user);
+
+        $product = DB::table('cloud_catalog_products')
+            ->where('store_id', $store->id)
+            ->where('id', $productId)
+            ->firstOrFail();
+
+        $bumpCatalogVersion($store->id);
+
+        DB::table('cloud_catalog_products')
+            ->where('id', $product->id)
+            ->delete();
+
+        return redirect()->route(
+            'catalog.index',
+            ['page' => $request->query('page'), 'q' => $request->query('q')]
+        )->with('status', 'Producto eliminado del catalogo cloud.');
+    })->name('catalog.destroy');
 });

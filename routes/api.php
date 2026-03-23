@@ -498,6 +498,18 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 }
             }
 
+            if ($event['event_type'] === 'product.deleted') {
+                $existingProduct = $findCatalogProduct($eventPayload);
+
+                if ($existingProduct) {
+                    $catalogVersion = $nextCatalogVersion();
+
+                    DB::table('cloud_catalog_products')
+                        ->where('id', $existingProduct->id)
+                        ->delete();
+                }
+            }
+
             if ($event['event_type'] === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
                 $catalogVersion = null;
 
