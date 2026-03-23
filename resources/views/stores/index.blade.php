@@ -1,10 +1,10 @@
-@extends('layouts.app', ['title' => 'Stores | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Sucursales | BRS Cloud'])
 
 @section('content')
 <section class="hero">
-    <small>Stores</small>
-    <h2>Sucursales del tenant</h2>
-    <p>Centraliza branding, timezone, credenciales de integracion y estado operativo por sucursal.</p>
+    <small>Sucursales</small>
+    <h2>Organiza tus sucursales</h2>
+    <p>Administra el nombre comercial, zona horaria, catalogo y estado operativo de cada sucursal.</p>
 </section>
 
 @if (session('status'))
@@ -17,9 +17,9 @@
 
 <section class="metrics-grid">
     <article class="stat">
-        <div class="stat-label">Stores</div>
+        <div class="stat-label">Sucursales</div>
         <div class="stat-value">{{ $storeStats['total'] }}</div>
-        <div class="stat-note">Sucursales registradas en este tenant</div>
+        <div class="stat-note">Registradas en tu cuenta</div>
     </article>
     <article class="stat">
         <div class="stat-label">Activas</div>
@@ -29,12 +29,12 @@
     <article class="stat">
         <div class="stat-label">Devices</div>
         <div class="stat-value">{{ $storeStats['devices'] }}</div>
-        <div class="stat-note">Cajas y dispositivos ligados</div>
+        <div class="stat-note">Cajas asignadas a tus sucursales</div>
     </article>
     <article class="stat">
         <div class="stat-label">Catalogo</div>
         <div class="stat-value">{{ $storeStats['catalogItems'] }}</div>
-        <div class="stat-note">Productos cloud across stores</div>
+        <div class="stat-note">Productos compartidos entre sucursales</div>
     </article>
 </section>
 
@@ -43,7 +43,7 @@
         <div class="toolbar">
             <div>
                 <small class="eyebrow">Editor</small>
-                <h3>{{ $editStore ? 'Editar store' : 'Nueva store' }}</h3>
+                <h3>{{ $editStore ? 'Editar sucursal' : 'Nueva sucursal' }}</h3>
             </div>
             @if ($editStore)
                 <a class="pill" href="{{ route('stores.index') }}">Cancelar edicion</a>
@@ -57,15 +57,15 @@
             @endif
 
             <div class="field">
-                <label for="name">Nombre interno</label>
+                <label for="name">Nombre de la sucursal</label>
                 <input id="name" name="name" value="{{ old('name', $editStore->name ?? '') }}" required>
             </div>
             <div class="field">
-                <label for="code">Codigo de store</label>
+                <label for="code">Codigo interno</label>
                 <input id="code" name="code" value="{{ old('code', $editStore->code ?? '') }}" required>
             </div>
             <div class="field">
-                <label for="timezone">Timezone</label>
+                <label for="timezone">Zona horaria</label>
                 <input id="timezone" name="timezone" value="{{ old('timezone', $editStore->timezone ?? 'America/Tijuana') }}" required>
             </div>
             <div class="field">
@@ -79,15 +79,15 @@
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                 <div>
                     <h4>Estado de la store</h4>
-                    <p>Desactiva una sucursal si quieres detener check-ins nuevos sin borrar su historial.</p>
+                    <p>Desactiva una sucursal si quieres detener nuevas conexiones sin borrar su historial.</p>
                 </div>
                 <label style="margin: 0; display: flex; align-items: center; gap: 10px;">
                     <input id="is_active" name="is_active" type="checkbox" value="1" {{ old('is_active', $editStore->is_active ?? true) ? 'checked' : '' }} style="width: auto;">
-                    <span>Store activa</span>
+                    <span>Sucursal activa</span>
                 </label>
             </div>
             <div class="row-actions" style="grid-column: 1 / -1;">
-                <button class="button" type="submit">{{ $editStore ? 'Guardar store' : 'Crear store' }}</button>
+                <button class="button" type="submit">{{ $editStore ? 'Guardar sucursal' : 'Crear sucursal' }}</button>
             </div>
         </form>
     </article>
@@ -96,7 +96,7 @@
         <div class="toolbar">
             <div>
                 <small class="eyebrow">Resumen</small>
-                <h3>Stores del tenant</h3>
+                <h3>Sucursales de tu negocio</h3>
             </div>
             <span class="pill">{{ $stores->count() }} registradas</span>
         </div>
@@ -120,7 +120,7 @@
                         </div>
                         <div>
                             <small class="eyebrow">Operacion</small>
-                            <p>{{ $deviceCounts[$store->id] ?? 0 }} devices · {{ $catalogCounts[$store->id] ?? 0 }} items</p>
+                            <p>{{ $deviceCounts[$store->id] ?? 0 }} cajas · {{ $catalogCounts[$store->id] ?? 0 }} productos</p>
                             <p class="muted">Catalogo v{{ $store->catalog_version }}</p>
                         </div>
                     </div>
@@ -129,7 +129,7 @@
                         <a class="button-secondary" href="{{ route('stores.index', ['edit' => $store->id]) }}">Editar</a>
                         <form method="POST" action="{{ route('stores.rotate-key', $store->id) }}">
                             @csrf
-                            <button class="button-secondary" type="submit">Regenerar key</button>
+                            <button class="button-secondary" type="submit">Regenerar clave</button>
                         </form>
                     </div>
                 </div>

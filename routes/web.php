@@ -337,8 +337,24 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $stats = [
             'stores' => DB::table('stores')->where('tenant_id', $tenantId)->count(),
             'devices' => DB::table('devices')->where('tenant_id', $tenantId)->count(),
+            'onlineDevices' => DB::table('devices')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->where('last_seen_at', '>=', now()->subMinutes(10))
+                ->count(),
             'catalogItems' => DB::table('cloud_catalog_products')->where('store_id', $storeId)->count(),
             'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'conflicts' => DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->whereNotNull('apply_error')
+                ->count(),
+            'lowStock' => DB::table('cloud_catalog_products')
+                ->where('store_id', $storeId)
+                ->where('is_active', true)
+                ->where('track_inventory', true)
+                ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+                ->count(),
         ];
 
         $recentDevices = Device::query()

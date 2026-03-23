@@ -1,10 +1,10 @@
-@extends('layouts.app', ['title' => 'Catalogo | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Catalogo Compartido | BRS Cloud'])
 
 @section('content')
 <section class="hero">
-    <small>Catalogo cloud</small>
-    <h2>Productos compartidos</h2>
-    <p>Este snapshot alimenta cajas offline-first y se redistribuye por version de catalogo.</p>
+    <small>Catalogo compartido</small>
+    <h2>Productos y stock de la sucursal</h2>
+    <p>Desde aqui administras el inventario compartido que se replica hacia tus cajas conectadas.</p>
 </section>
 
 @if (session('status'))
@@ -24,7 +24,7 @@
         <div class="toolbar">
             <div>
                 <small class="eyebrow">Editor</small>
-                <h3>{{ $editProduct ? 'Editar producto cloud' : 'Nuevo producto cloud' }}</h3>
+                <h3>{{ $editProduct ? 'Editar producto' : 'Agregar producto' }}</h3>
             </div>
             @if ($editProduct)
                 <a class="pill" href="{{ route('catalog.index') }}">Cancelar edicion</a>
@@ -76,13 +76,13 @@
     </article>
 
     <article class="card">
-        <small class="eyebrow">Store</small>
+        <small class="eyebrow">Sucursal activa</small>
         <h3>{{ $store->name }}</h3>
         <div class="meta-list" style="margin-top: 16px;">
-            <div class="meta-row"><span class="muted">Codigo</span><strong>{{ $store->code }}</strong></div>
-            <div class="meta-row"><span class="muted">Catalog version</span><strong>v{{ $store->catalog_version }}</strong></div>
-            <div class="meta-row"><span class="muted">Timezone</span><strong>{{ $store->timezone }}</strong></div>
-            <div class="meta-row"><span class="muted">Branding</span><strong>{{ data_get($store->branding_json, 'business_name', 'n/a') }}</strong></div>
+            <div class="meta-row"><span class="muted">Codigo interno</span><strong>{{ $store->code }}</strong></div>
+            <div class="meta-row"><span class="muted">Version del catalogo</span><strong>v{{ $store->catalog_version }}</strong></div>
+            <div class="meta-row"><span class="muted">Zona horaria</span><strong>{{ $store->timezone }}</strong></div>
+            <div class="meta-row"><span class="muted">Nombre comercial</span><strong>{{ data_get($store->branding_json, 'business_name', 'n/a') }}</strong></div>
         </div>
     </article>
 </section>
@@ -95,8 +95,8 @@
     data-events-url="{{ route('catalog.events', ['store_id' => $store->id]) }}">
     <div class="toolbar">
         <div>
-            <small class="eyebrow">Inventario cloud</small>
-            <h3>Snapshot actual</h3>
+            <small class="eyebrow">Inventario</small>
+            <h3>Catalogo actual</h3>
             <p class="muted" data-live-status style="margin-top: 6px;">Actualizacion automatica activa.</p>
         </div>
         <form method="GET" action="{{ route('catalog.index') }}" style="display: flex; gap: 10px; align-items: center;">
@@ -110,11 +110,11 @@
             <tr>
                 <th>Producto</th>
                 <th>SKU</th>
-                <th>Barcode</th>
+                <th>Codigo</th>
                 <th>Precio</th>
                 <th>Stock</th>
-                <th>Estado</th>
-                <th>Version</th>
+                <th>Disponibilidad</th>
+                <th>Version del catalogo</th>
                 <th></th>
             </tr>
         </thead>
@@ -133,7 +133,7 @@
                             <a class="pill" href="{{ route('catalog.index', ['edit' => $item->id] + ($search ? ['q' => $search] : [])) }}">Editar</a>
                             <form method="POST" action="{{ route('catalog.toggle', $item->id) }}">
                                 @csrf
-                                <button class="pill" type="submit" style="cursor: pointer;">{{ $item->is_active ? 'Desactivar' : 'Activar' }}</button>
+                                <button class="pill" type="submit" style="cursor: pointer;">{{ $item->is_active ? 'Pausar' : 'Reactivar' }}</button>
                             </form>
                             <form method="POST" action="{{ route('catalog.destroy', $item->id) }}" onsubmit="return confirm('Se eliminara {{ addslashes($item->name) }} del catalogo cloud. ¿Continuar?')">
                                 @csrf

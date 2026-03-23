@@ -1,32 +1,32 @@
-@extends('layouts.app', ['title' => 'Sync | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Actividad | BRS Cloud'])
 
 @section('content')
 <section class="hero">
-    <small>Sync</small>
-    <h2>Monitor de sincronizacion</h2>
-    <p>Revisa lo que reporta cada caja, si el evento ya se aplico al snapshot compartido y si hubo conflictos por version de catalogo.</p>
+    <small>Actividad</small>
+    <h2>Actividad de sincronizacion</h2>
+    <p>Consulta lo que envian tus cajas, si ya quedo aplicado en el catalogo compartido y si existe algo que necesite revision.</p>
 </section>
 
 <section class="metrics-grid">
     <article class="stat">
-        <div class="stat-label">Eventos</div>
+        <div class="stat-label">Movimientos</div>
         <div class="stat-value">{{ $syncStats['total'] }}</div>
-        <div class="stat-note">Eventos del contexto activo</div>
+        <div class="stat-note">Recibidos en la sucursal activa</div>
     </article>
     <article class="stat">
         <div class="stat-label">Aplicados</div>
         <div class="stat-value">{{ $syncStats['applied'] }}</div>
-        <div class="stat-note">Ya proyectados al catalogo cloud</div>
+        <div class="stat-note">Ya reflejados en el catalogo compartido</div>
     </article>
     <article class="stat">
-        <div class="stat-label">Conflictos</div>
+        <div class="stat-label">Incidencias</div>
         <div class="stat-value">{{ $syncStats['conflicts'] }}</div>
-        <div class="stat-note">Eventos frenados por version o error</div>
+        <div class="stat-note">Movimientos frenados por conflicto o error</div>
     </article>
     <article class="stat">
-        <div class="stat-label">Ultimo evento</div>
+        <div class="stat-label">Ultimo movimiento</div>
         <div class="stat-value" style="font-size: 18px; line-height: 1.25;">{{ $syncStats['lastEventAt'] ? \Carbon\Carbon::parse($syncStats['lastEventAt'])->format('M j, Y · g:i A') : 'Sin eventos' }}</div>
-        <div class="stat-note">Marca de tiempo mas reciente</div>
+        <div class="stat-note">Actividad mas reciente recibida</div>
     </article>
 </section>
 
@@ -35,12 +35,12 @@
         <div class="toolbar">
             <div>
                 <small class="eyebrow">Filtros</small>
-                <h3>Eventos recibidos</h3>
+                <h3>Filtrar actividad</h3>
             </div>
         </div>
         <form method="GET" action="{{ route('sync.index') }}" class="grid grid-2">
             <div class="field">
-                <label for="store_id">Store</label>
+                <label for="store_id">Sucursal</label>
                 <select id="store_id" name="store_id">
                     @foreach ($storeOptions as $option)
                         <option value="{{ $option->id }}" {{ (int) $storeFilter === (int) $option->id ? 'selected' : '' }}>{{ $option->name }}</option>
@@ -48,16 +48,16 @@
                 </select>
             </div>
             <div class="field">
-                <label for="device_id">Device</label>
+                <label for="device_id">Caja</label>
                 <select id="device_id" name="device_id">
-                    <option value="">Todos los devices</option>
+                    <option value="">Todas las cajas</option>
                     @foreach ($deviceOptions as $option)
                         <option value="{{ $option->device_id }}" {{ $deviceFilter === $option->device_id ? 'selected' : '' }}>{{ $option->name ?: $option->device_id }}</option>
                     @endforeach
                 </select>
             </div>
             <div class="field" style="grid-column: 1 / -1;">
-                <label for="event_type">Tipo de evento</label>
+                <label for="event_type">Tipo de movimiento</label>
                 <input id="event_type" name="event_type" value="{{ $eventFilter }}" placeholder="sale.created, cash-session.opened, product.updated...">
             </div>
             <div class="row-actions" style="grid-column: 1 / -1;">
@@ -69,8 +69,8 @@
     <article class="card">
         <div class="toolbar">
             <div>
-                <small class="eyebrow">Top event types</small>
-                <h3>Lo que mas esta sincronizando</h3>
+                <small class="eyebrow">Tendencia</small>
+                <h3>Lo que mas se esta moviendo</h3>
             </div>
         </div>
         <div class="stack">
@@ -78,12 +78,12 @@
                 <div class="surface" style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                     <div>
                         <strong>{{ $row->event_type }}</strong>
-                        <p>Actividad recurrente del outbox de las cajas</p>
+                        <p>Movimiento recurrente entre cajas y catalogo compartido</p>
                     </div>
                     <span class="pill">{{ $row->aggregate }}</span>
                 </div>
             @empty
-                <div class="empty">Todavia no hay eventos para construir una distribucion.</div>
+                <div class="empty">Todavia no hay actividad suficiente para mostrar una tendencia.</div>
             @endforelse
         </div>
     </article>
@@ -93,11 +93,11 @@
     <table class="table">
         <thead>
             <tr>
-                <th>Evento</th>
-                <th>Store</th>
-                <th>Device</th>
-                <th>Estado</th>
-                <th>Payload</th>
+                <th>Movimiento</th>
+                <th>Origen</th>
+                <th>Caja</th>
+                <th>Resultado</th>
+                <th>Detalle</th>
                 <th>Recibido</th>
             </tr>
         </thead>
@@ -105,15 +105,23 @@
             @forelse ($events as $event)
                 @php($payload = json_decode($event->payload_json, true) ?: [])
                 @php($statusClass = $event->apply_error ? 'danger' : ($event->applied_at ? 'success' : ''))
-                @php($statusLabel = $event->apply_error ? 'Conflicto' : ($event->applied_at ? 'Aplicado' : 'Pendiente'))
+                @php($statusLabel = $event->apply_error ? 'Necesita revision' : ($event->applied_at ? 'Aplicado' : 'Pendiente'))
+                @php($eventLabel = match ($event->event_type) {
+                    'product.created' => 'Producto creado',
+                    'product.updated' => 'Producto actualizado',
+                    'product.deleted' => 'Producto eliminado',
+                    'product.stock-adjusted' => 'Stock ajustado',
+                    'sale.created' => 'Venta registrada',
+                    default => \Illuminate\Support\Str::headline(str_replace('.', ' ', $event->event_type)),
+                })
                 <tr>
                     <td>
-                        <strong>{{ $event->event_type }}</strong><br>
+                        <strong>{{ $eventLabel }}</strong><br>
                         <span class="muted">{{ $event->event_id }}</span>
                     </td>
                     <td>
                         <strong>{{ $event->store_id }}</strong><br>
-                        <span class="muted">{{ $event->aggregate_type }}</span>
+                        <span class="muted">{{ \Illuminate\Support\Str::headline(str_replace('-', ' ', $event->aggregate_type)) }}</span>
                     </td>
                     <td>{{ $event->device_id }}</td>
                     <td>
@@ -131,7 +139,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6"><div class="empty">Todavia no hay eventos para esos filtros.</div></td>
+                    <td colspan="6"><div class="empty">Todavia no hay actividad para esos filtros.</div></td>
                 </tr>
             @endforelse
         </tbody>

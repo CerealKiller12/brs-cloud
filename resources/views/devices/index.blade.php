@@ -1,10 +1,10 @@
-@extends('layouts.app', ['title' => 'Devices | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Cajas | BRS Cloud'])
 
 @section('content')
 <section class="hero">
-    <small>Devices</small>
+    <small>Cajas conectadas</small>
     <h2>Cajas y dispositivos</h2>
-    <p>Monitorea la salud real de cada caja: ultima conexion, ultima sync, conflictos pendientes y necesidad de re-enrolar tokens.</p>
+    <p>Revisa que cajas estan activas, cuales necesitan atencion y cuando fue la ultima vez que reportaron actividad.</p>
 </section>
 
 @if (session('status'))
@@ -13,9 +13,9 @@
 
 <section class="metrics-grid">
     <article class="stat">
-        <div class="stat-label">Devices</div>
+        <div class="stat-label">Cajas</div>
         <div class="stat-value">{{ $deviceStats['total'] }}</div>
-        <div class="stat-note">Activos e historicos para este tenant</div>
+        <div class="stat-note">Registradas en tu cuenta</div>
     </article>
     <article class="stat">
         <div class="stat-label">iOS</div>
@@ -30,30 +30,30 @@
     <article class="stat">
         <div class="stat-label">Ultimas 24h</div>
         <div class="stat-value">{{ $deviceStats['seenToday'] }}</div>
-        <div class="stat-note">Con check-in reciente al cloud</div>
+        <div class="stat-note">Con actividad reciente en las ultimas 24 horas</div>
     </article>
     <article class="stat">
-        <div class="stat-label">Atrasadas</div>
+        <div class="stat-label">Requieren revision</div>
         <div class="stat-value">{{ $deviceStats['stale'] }}</div>
-        <div class="stat-note">Sin reportar desde hace mas de 24h</div>
+        <div class="stat-note">Sin reportar desde hace mas de 24 horas</div>
     </article>
     <article class="stat">
-        <div class="stat-label">Con conflictos</div>
+        <div class="stat-label">Con incidencias</div>
         <div class="stat-value">{{ $deviceStats['withConflicts'] }}</div>
-        <div class="stat-note">Cajas con eventos frenados por cloud</div>
+        <div class="stat-note">Cajas con movimientos frenados por cloud</div>
     </article>
 </section>
 
 <section class="card">
     <div class="toolbar">
-        <div>
-            <small class="eyebrow">Filtros</small>
-            <h3>Buscar devices</h3>
-        </div>
+            <div>
+                <small class="eyebrow">Filtros</small>
+                <h3>Buscar cajas</h3>
+            </div>
         <form method="GET" action="{{ route('devices.index') }}" class="toolbar-stack">
-            <input name="q" value="{{ $search }}" placeholder="Device, plataforma o modo" style="min-width: 280px;">
+            <input name="q" value="{{ $search }}" placeholder="Nombre de caja, plataforma o modo" style="min-width: 280px;">
             <select name="store_id" style="min-width: 220px;">
-                <option value="">Todas las stores</option>
+                <option value="">Todas las sucursales</option>
                 @foreach ($storeOptions as $storeOption)
                     <option value="{{ $storeOption->id }}" {{ (string) $storeFilter === (string) $storeOption->id ? 'selected' : '' }}>{{ $storeOption->name }}</option>
                 @endforeach
@@ -67,13 +67,13 @@
     <table class="table">
         <thead>
             <tr>
-                <th>Device</th>
-                <th>Salud</th>
-                <th>Store</th>
-                <th>Modo</th>
+                <th>Caja</th>
+                <th>Estado</th>
+                <th>Sucursal</th>
+                <th>Tipo</th>
                 <th>Version</th>
-                <th>Sync</th>
-                <th>Ultima conexion</th>
+                <th>Resumen</th>
+                <th>Ultima actividad</th>
                 <th></th>
             </tr>
         </thead>
@@ -93,13 +93,13 @@
                         <span class="pill {{ $healthClass }}">{{ $healthLabel }}</span><br>
                         <span class="muted">{{ ($tokenCounts[$device->id] ?? 0) > 0 ? 'Token activo' : 'Sin token' }}</span>
                     </td>
-                    <td>{{ $storeNames[$device->store_id] ?? 'Sin store' }}</td>
+                    <td>{{ $storeNames[$device->store_id] ?? 'Sin sucursal' }}</td>
                     <td>{{ $device->app_mode ?: 'sin modo' }}</td>
                     <td>{{ $device->current_version ?: 'n/a' }}</td>
                     <td>
-                        <strong>{{ $health->total_events ?? 0 }} eventos</strong><br>
+                        <strong>{{ $health->total_events ?? 0 }} movimientos</strong><br>
                         <span class="muted">
-                            {{ $health->applied_events ?? 0 }} aplicados · {{ $health->conflict_events ?? 0 }} conflictos
+                            {{ $health->applied_events ?? 0 }} aplicados · {{ $health->conflict_events ?? 0 }} incidencias
                         </span>
                         @if (!empty($health?->last_event_at))
                             <br><span class="muted">{{ \Carbon\Carbon::parse($health->last_event_at)->format('M j, Y · g:i A') }}</span>
@@ -107,15 +107,15 @@
                     </td>
                     <td>{{ optional($device->last_seen_at)->format('M j, Y · g:i A') ?: 'sin check-in' }}</td>
                     <td>
-                        <form method="POST" action="{{ route('devices.revoke-token', $device->id) }}" onsubmit="return confirm('Se revocaran todos los tokens de este device.');">
+                        <form method="POST" action="{{ route('devices.revoke-token', $device->id) }}" onsubmit="return confirm('Se revocaran todos los tokens de esta caja.');">
                             @csrf
-                            <button class="button-danger" type="submit">Revocar token</button>
+                            <button class="button-danger" type="submit">Desvincular token</button>
                         </form>
                     </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8"><div class="empty">No hay devices que coincidan con ese filtro.</div></td>
+                    <td colspan="8"><div class="empty">No hay cajas que coincidan con ese filtro.</div></td>
                 </tr>
             @endforelse
         </tbody>

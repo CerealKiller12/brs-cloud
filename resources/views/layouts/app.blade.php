@@ -390,20 +390,20 @@
     <div class="shell">
         <aside class="sidebar">
             <div class="brand">
-                <small>BRS Cloud</small>
+                <small>Tu operacion en la nube</small>
                 <strong>{{ auth()->user()->tenant?->name ?? 'BRS Cloud' }}</strong>
             </div>
 
             @if (!empty($cloudActiveStore) && !empty($cloudAvailableStores))
                 <div class="store-context">
                     <div class="store-meta">
-                        <span>Store activa</span>
+                        <span>Sucursal activa</span>
                         <strong>{{ $cloudActiveStore->name }}</strong>
-                        <span>{{ $cloudActiveStore->code }} · v{{ $cloudActiveStore->catalog_version }}</span>
+                        <span>{{ $cloudActiveStore->code }} · Catalogo v{{ $cloudActiveStore->catalog_version }}</span>
                     </div>
                     <form method="POST" action="{{ route('context.store') }}">
                         @csrf
-                        <label for="sidebar-store-selector">Cambiar contexto</label>
+                        <label for="sidebar-store-selector">Cambiar sucursal</label>
                         <select id="sidebar-store-selector" name="store_id" onchange="this.form.submit()">
                             @foreach ($cloudAvailableStores as $availableStore)
                                 <option value="{{ $availableStore->id }}" {{ (int) $availableStore->id === (int) $cloudActiveStore->id ? 'selected' : '' }}>
@@ -416,18 +416,18 @@
             @endif
 
             <div class="nav-section">
-                <span>Cloud</span>
-                <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">Dashboard</a>
-                <a class="nav-link {{ request()->routeIs('stores.index') ? 'active' : '' }}" href="{{ route('stores.index') }}">Stores</a>
-                <a class="nav-link {{ request()->routeIs('devices.index') ? 'active' : '' }}" href="{{ route('devices.index') }}">Devices</a>
-                <a class="nav-link {{ request()->routeIs('catalog.index') ? 'active' : '' }}" href="{{ route('catalog.index') }}">Catalogo</a>
-                <a class="nav-link {{ request()->routeIs('sync.index') ? 'active' : '' }}" href="{{ route('sync.index') }}">Sync</a>
-                <a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.index') }}">Settings</a>
+                <span>Operacion</span>
+                <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">Inicio</a>
+                <a class="nav-link {{ request()->routeIs('stores.index') ? 'active' : '' }}" href="{{ route('stores.index') }}">Sucursales</a>
+                <a class="nav-link {{ request()->routeIs('devices.index') ? 'active' : '' }}" href="{{ route('devices.index') }}">Cajas</a>
+                <a class="nav-link {{ request()->routeIs('catalog.index') ? 'active' : '' }}" href="{{ route('catalog.index') }}">Catalogo compartido</a>
+                <a class="nav-link {{ request()->routeIs('sync.index') ? 'active' : '' }}" href="{{ route('sync.index') }}">Actividad</a>
+                <a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.index') }}">Cuenta</a>
             </div>
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit">Cerrar sesion</button>
+                <button type="submit">Salir de la cuenta</button>
             </form>
         </aside>
         <main class="content">
