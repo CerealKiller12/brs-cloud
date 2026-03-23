@@ -1,6 +1,5 @@
 <?php
 
-use App\Events\CatalogVersionChanged;
 use App\Http\Controllers\Auth\SocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
@@ -59,29 +58,80 @@ View::composer('layouts.app', function ($view) use ($buildStoreContext) {
     ]);
 });
 
-$broadcastCatalogVersionChanged = function (int $storeId): void {
-    $store = DB::table('stores')
-        ->where('id', $storeId)
-        ->first(['id', 'code', 'catalog_version']);
-
-    if (!$store) {
-        return;
-    }
-
-    event(new CatalogVersionChanged(
-        (int) $store->id,
-        (string) $store->code,
-        (int) $store->catalog_version,
-    ));
-};
-
-$bumpCatalogVersion = function (int $storeId) use ($broadcastCatalogVersionChanged): int {
+$bumpCatalogVersion = function (int $storeId): int {
     DB::table('stores')->where('id', $storeId)->increment('catalog_version');
 
-    $nextVersion = (int) DB::table('stores')->where('id', $storeId)->value('catalog_version');
-    $broadcastCatalogVersionChanged($storeId);
+    return (int) DB::table('stores')->where('id', $storeId)->value('catalog_version');
+};
 
-    return $nextVersion;
+$streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $initialCatalogVersion) {
+    return response()->stream(function () use ($storeId, $storeCode, $initialCatalogVersion) {
+        ignore_user_abort(true);
+        @set_time_limit(0);
+
+        if (function_exists('session_write_close')) {
+            @session_write_close();
+        }
+
+        $sendEvent = function (string $event, array $payload): void {
+            echo "event: {$event}\n";
+            echo 'data: '.json_encode($payload, JSON_UNESCAPED_SLASHES)."\n\n";
+
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+
+            @flush();
+        };
+
+        $lastVersion = max(0, $initialCatalogVersion);
+        $startedAt = time();
+        $lastHeartbeatAt = 0;
+
+        $sendEvent('catalog.version', [
+            'storeId' => $storeId,
+            'storeCode' => $storeCode,
+            'catalogVersion' => $lastVersion,
+            'emittedAt' => now()->toIso8601String(),
+        ]);
+
+        while (!connection_aborted() && (time() - $startedAt) < 30) {
+            usleep(2000000);
+
+            $currentVersion = (int) DB::table('stores')
+                ->where('id', $storeId)
+                ->value('catalog_version');
+
+            if ($currentVersion > $lastVersion) {
+                $lastVersion = $currentVersion;
+
+                $sendEvent('catalog.version', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+
+                continue;
+            }
+
+            if ((time() - $lastHeartbeatAt) >= 10) {
+                $lastHeartbeatAt = time();
+
+                $sendEvent('heartbeat', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+            }
+        }
+    }, 200, [
+        'Content-Type' => 'text/event-stream',
+        'Cache-Control' => 'no-cache, no-transform',
+        'Connection' => 'keep-alive',
+        'X-Accel-Buffering' => 'no',
+    ]);
 };
 
 Route::get('/', function () {
@@ -122,7 +172,7 @@ Route::middleware('guest')->group(function () {
     })->name('login.submit');
 });
 
-Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion) {
+Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion, $streamCatalogVersionEvents) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
@@ -616,6 +666,19 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'search' => $search,
         ]);
     })->name('catalog.index');
+
+    Route::get('/catalog/events', function (Request $request) use ($resolveStoreForUser, $streamCatalogVersionEvents) {
+        /** @var User $user */
+        $user = Auth::user();
+        $requestedStoreId = $request->integer('store_id') ?: null;
+        $store = $resolveStoreForUser($user, $requestedStoreId);
+
+        return $streamCatalogVersionEvents(
+            (int) $store->id,
+            (string) $store->code,
+            (int) $store->catalog_version,
+        );
+    })->name('catalog.events');
 
     Route::post('/catalog', function (Request $request) use ($bumpCatalogVersion, $resolveStoreForUser) {
         /** @var User $user */

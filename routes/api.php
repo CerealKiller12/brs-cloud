@@ -1,6 +1,5 @@
 <?php
 
-use App\Events\CatalogVersionChanged;
 use App\Models\Device;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -22,20 +21,70 @@ $supportedPlatforms = [
     'android',
 ];
 
-$broadcastCatalogVersionChanged = function (int $storeId): void {
-    $store = DB::table('stores')
-        ->where('id', $storeId)
-        ->first(['id', 'code', 'catalog_version']);
+$streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $initialCatalogVersion) {
+    return response()->stream(function () use ($storeId, $storeCode, $initialCatalogVersion) {
+        ignore_user_abort(true);
+        @set_time_limit(0);
 
-    if (!$store) {
-        return;
-    }
+        $sendEvent = function (string $event, array $payload): void {
+            echo "event: {$event}\n";
+            echo 'data: '.json_encode($payload, JSON_UNESCAPED_SLASHES)."\n\n";
 
-    event(new CatalogVersionChanged(
-        (int) $store->id,
-        (string) $store->code,
-        (int) $store->catalog_version,
-    ));
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+
+            @flush();
+        };
+
+        $lastVersion = max(0, $initialCatalogVersion);
+        $startedAt = time();
+        $lastHeartbeatAt = 0;
+
+        $sendEvent('catalog.version', [
+            'storeId' => $storeId,
+            'storeCode' => $storeCode,
+            'catalogVersion' => $lastVersion,
+            'emittedAt' => now()->toIso8601String(),
+        ]);
+
+        while (!connection_aborted() && (time() - $startedAt) < 30) {
+            usleep(2000000);
+
+            $currentVersion = (int) DB::table('stores')
+                ->where('id', $storeId)
+                ->value('catalog_version');
+
+            if ($currentVersion > $lastVersion) {
+                $lastVersion = $currentVersion;
+
+                $sendEvent('catalog.version', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+
+                continue;
+            }
+
+            if ((time() - $lastHeartbeatAt) >= 10) {
+                $lastHeartbeatAt = time();
+
+                $sendEvent('heartbeat', [
+                    'storeId' => $storeId,
+                    'storeCode' => $storeCode,
+                    'catalogVersion' => $lastVersion,
+                    'emittedAt' => now()->toIso8601String(),
+                ]);
+            }
+        }
+    }, 200, [
+        'Content-Type' => 'text/event-stream',
+        'Cache-Control' => 'no-cache, no-transform',
+        'Connection' => 'keep-alive',
+        'X-Accel-Buffering' => 'no',
+    ]);
 };
 
 Route::get('/health', function () {
@@ -539,38 +588,17 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
     ]);
 })->middleware('auth:sanctum');
 
-Route::get('/cloud/realtime-config', function (Request $request) use ($resolveStoreContext) {
+Route::get('/cloud/events/stream', function (Request $request) use ($resolveStoreContext, $streamCatalogVersionEvents) {
     $store = $resolveStoreContext($request);
-    $defaultConnection = (string) config('broadcasting.default', 'null');
-    $connection = (array) config("broadcasting.connections.{$defaultConnection}", []);
-    $options = (array) ($connection['options'] ?? []);
-    $configuredHost = env($defaultConnection === 'pusher' ? 'PUSHER_HOST' : 'REVERB_HOST');
-    $scheme = (string) ($options['scheme'] ?? ($request->isSecure() ? 'https' : 'http'));
-    $defaultPort = $scheme === 'https' ? 443 : 80;
 
-    return response()->json([
-        'broadcast' => [
-            'driver' => $defaultConnection,
-            'key' => (string) ($connection['key'] ?? ''),
-            'cluster' => (string) ($options['cluster'] ?? 'mt1'),
-            'host' => $configuredHost ? (string) ($options['host'] ?? $request->getHost()) : '',
-            'port' => (int) ($options['port'] ?? $defaultPort),
-            'scheme' => $scheme,
-            'path' => (string) config('reverb.servers.reverb.path', ''),
-        ],
-        'channel' => [
-            'name' => "catalog.store.{$store->store_row_id}",
-            'event' => 'catalog.version.changed',
-        ],
-        'store' => [
-            'id' => (int) $store->store_row_id,
-            'code' => (string) $store->store_code,
-            'catalogVersion' => (int) $store->catalog_version,
-        ],
-    ]);
+    return $streamCatalogVersionEvents(
+        (int) $store->store_row_id,
+        (string) $store->store_code,
+        (int) $store->catalog_version,
+    );
 })->middleware('auth:sanctum');
 
-Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext, $broadcastCatalogVersionChanged) {
+Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
     $payload = $request->validate([
         'device_id' => ['required', 'string', 'max:120'],
         'events' => ['required', 'array', 'min:1'],
@@ -822,10 +850,6 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
     }
 
     $finalCatalogVersion = (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version');
-
-    if ($finalCatalogVersion > $startingCatalogVersion) {
-        $broadcastCatalogVersionChanged((int) $store->store_row_id);
-    }
 
     return response()->json([
         'ok' => true,

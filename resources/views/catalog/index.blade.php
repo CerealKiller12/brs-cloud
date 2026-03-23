@@ -87,31 +87,12 @@
     </article>
 </section>
 
-@php
-    $broadcastDriver = (string) config('broadcasting.default', 'null');
-    $broadcastConnection = (array) config("broadcasting.connections.{$broadcastDriver}", []);
-    $broadcastOptions = (array) ($broadcastConnection['options'] ?? []);
-    $broadcastScheme = (string) ($broadcastOptions['scheme'] ?? (request()->isSecure() ? 'https' : 'http'));
-    $broadcastPort = (int) ($broadcastOptions['port'] ?? ($broadcastScheme === 'https' ? 443 : 80));
-    $configuredBroadcastHost = env($broadcastDriver === 'pusher' ? 'PUSHER_HOST' : 'REVERB_HOST');
-    $broadcastHost = $configuredBroadcastHost ? (string) ($broadcastOptions['host'] ?? request()->getHost()) : '';
-    $broadcastCluster = (string) ($broadcastOptions['cluster'] ?? 'mt1');
-@endphp
-
 <section
     class="card"
     data-cloud-catalog-live
     data-catalog-version="{{ (int) $store->catalog_version }}"
     data-store-id="{{ (int) $store->id }}"
-    data-broadcast-driver="{{ $broadcastDriver }}"
-    data-broadcast-key="{{ (string) ($broadcastConnection['key'] ?? '') }}"
-    data-broadcast-cluster="{{ $broadcastCluster }}"
-    data-broadcast-host="{{ $broadcastHost }}"
-    data-broadcast-port="{{ $broadcastPort }}"
-    data-broadcast-scheme="{{ $broadcastScheme }}"
-    data-broadcast-path="{{ (string) config('reverb.servers.reverb.path', '') }}"
-    data-broadcast-channel="catalog.store.{{ (int) $store->id }}"
-    data-broadcast-event="catalog.version.changed">
+    data-events-url="{{ route('catalog.events', ['store_id' => $store->id]) }}">
     <div class="toolbar">
         <div>
             <small class="eyebrow">Inventario cloud</small>
@@ -181,26 +162,18 @@
     <div class="pagination">{{ $catalog->links() }}</div>
 </section>
 
-<script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <script>
 (() => {
     const root = document.querySelector('[data-cloud-catalog-live]');
 
-    if (!root || !window.Pusher) {
+    if (!root) {
         return;
     }
 
     let currentVersion = Number(root.dataset.catalogVersion || '0');
-    const driver = root.dataset.broadcastDriver || 'null';
-    const appKey = root.dataset.broadcastKey || '';
-    const cluster = root.dataset.broadcastCluster || 'mt1';
-    const host = root.dataset.broadcastHost || window.location.hostname;
-    const port = Number(root.dataset.broadcastPort || (window.location.protocol === 'https:' ? 443 : 80));
-    const scheme = root.dataset.broadcastScheme || (window.location.protocol === 'https:' ? 'https' : 'http');
-    const path = root.dataset.broadcastPath || '';
-    const channelName = root.dataset.broadcastChannel || '';
-    const eventName = root.dataset.broadcastEvent || 'catalog.version.changed';
+    const eventsUrl = root.dataset.eventsUrl || '';
     const liveStatus = root.querySelector('[data-live-status]');
+    let source = null;
 
     const setStatus = (text) => {
         if (liveStatus) {
@@ -208,68 +181,55 @@
         }
     };
 
-    if (!appKey || !channelName || driver === 'null') {
-        setStatus('Actualizacion automatica no disponible en este snapshot.');
-        return;
-    }
-
-    const realtimeOptions = {
-        cluster,
-        forceTLS: scheme === 'https',
-        enabledTransports: ['ws', 'wss'],
-        disableStats: true,
-    };
-
-    if (host) {
-        Object.assign(realtimeOptions, {
-            wsHost: host,
-            wsPort: port,
-            wssPort: port,
-            wsPath: path || undefined,
-        });
-    }
-
-    const realtime = new window.Pusher(appKey, realtimeOptions);
-
-    const channel = realtime.subscribe(channelName);
-    setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
-
-    channel.bind(eventName, (payload) => {
-        const nextVersion = Number(payload?.catalogVersion || 0);
-
-        if (nextVersion > currentVersion) {
-            setStatus(`Aplicando cambios del snapshot v${nextVersion}...`);
-            window.location.reload();
+    const connect = () => {
+        if (!eventsUrl || typeof EventSource === 'undefined') {
+            setStatus('Actualizacion automatica no disponible en este navegador.');
             return;
         }
 
-        currentVersion = nextVersion;
-        setStatus(`Snapshot al dia en v${currentVersion}.`);
-    });
+        if (source) {
+            source.close();
+        }
 
-    realtime.connection.bind('connected', () => {
-        setStatus(`Snapshot al dia en v${currentVersion}.`);
-    });
+        source = new EventSource(eventsUrl, { withCredentials: true });
+        setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
 
-    realtime.connection.bind('error', () => {
-        setStatus('No pude conectar el snapshot cloud en tiempo real.');
-    });
+        source.addEventListener('catalog.version', (event) => {
+            const payload = JSON.parse(event.data || '{}');
+            const nextVersion = Number(payload.catalogVersion || 0);
+
+            if (nextVersion > currentVersion) {
+                setStatus(`Aplicando cambios del snapshot v${nextVersion}...`);
+                window.location.reload();
+                return;
+            }
+
+            currentVersion = nextVersion;
+            setStatus(`Snapshot al dia en v${currentVersion}.`);
+        });
+
+        source.addEventListener('heartbeat', (event) => {
+            const payload = JSON.parse(event.data || '{}');
+            currentVersion = Number(payload.catalogVersion || currentVersion);
+            setStatus(`Snapshot al dia en v${currentVersion}.`);
+        });
+
+        source.onerror = () => {
+            setStatus('Esperando reconexion del snapshot cloud...');
+        };
+    };
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
+            connect();
         }
     });
 
-    window.addEventListener('beforeunload', () => {
-        try {
-            channel.unbind_all();
-            realtime.unsubscribe(channelName);
-            realtime.disconnect();
-        } catch {
-            setStatus('Actualizacion automatica no disponible en este navegador.');
-        }
+    window.addEventListener('focus', () => {
+        connect();
     });
+
+    connect();
 })();
 </script>
 @endsection
