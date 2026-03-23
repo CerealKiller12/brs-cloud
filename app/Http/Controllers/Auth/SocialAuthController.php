@@ -135,6 +135,10 @@ class SocialAuthController extends Controller
             return $host === 'localhost';
         }
 
+        if ($scheme === 'brspos') {
+            return $host === 'cloud-tenant';
+        }
+
         if (in_array($scheme, ['http', 'https'], true)) {
             return in_array($host, ['localhost', '127.0.0.1'], true);
         }
