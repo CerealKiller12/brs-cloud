@@ -70,11 +70,11 @@
             </div>
             <div class="field">
                 <label for="business_name">Nombre comercial</label>
-                <input id="business_name" name="business_name" value="{{ old('business_name', $editStore ? data_get(json_decode($editStore->branding_json, true), 'business_name') : '') }}">
+                <input id="business_name" name="business_name" value="{{ old('business_name', $editStore ? data_get(is_array($editStore->branding_json) ? $editStore->branding_json : (json_decode($editStore->branding_json ?? '[]', true) ?: []), 'business_name') : '') }}">
             </div>
             <div class="field" style="grid-column: 1 / -1;">
                 <label for="terminal_name">Nombre de caja por default</label>
-                <input id="terminal_name" name="terminal_name" value="{{ old('terminal_name', $editStore ? data_get(json_decode($editStore->branding_json, true), 'terminal_name') : '') }}">
+                <input id="terminal_name" name="terminal_name" value="{{ old('terminal_name', $editStore ? data_get(is_array($editStore->branding_json) ? $editStore->branding_json : (json_decode($editStore->branding_json ?? '[]', true) ?: []), 'terminal_name') : '') }}">
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                 <div>
@@ -103,7 +103,7 @@
 
         <div class="stack">
             @foreach ($stores as $store)
-                @php($branding = json_decode($store->branding_json, true))
+                @php($branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []))
                 <div class="surface">
                     <div class="toolbar" style="margin-bottom: 12px; align-items: flex-start;">
                         <div>
