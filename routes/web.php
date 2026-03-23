@@ -172,7 +172,7 @@ Route::middleware('guest')->group(function () {
     })->name('login.submit');
 });
 
-Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion) {
+Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion, $streamCatalogVersionEvents) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
