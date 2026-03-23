@@ -87,18 +87,30 @@
     </article>
 </section>
 
+@php
+    $broadcastDriver = (string) config('broadcasting.default', 'null');
+    $broadcastConnection = (array) config("broadcasting.connections.{$broadcastDriver}", []);
+    $broadcastOptions = (array) ($broadcastConnection['options'] ?? []);
+    $broadcastScheme = (string) ($broadcastOptions['scheme'] ?? (request()->isSecure() ? 'https' : 'http'));
+    $broadcastPort = (int) ($broadcastOptions['port'] ?? ($broadcastScheme === 'https' ? 443 : 80));
+    $broadcastHost = (string) ($broadcastOptions['host'] ?? request()->getHost());
+    $broadcastCluster = (string) ($broadcastOptions['cluster'] ?? 'mt1');
+@endphp
+
 <section
     class="card"
     data-cloud-catalog-live
     data-catalog-version="{{ (int) $store->catalog_version }}"
     data-store-id="{{ (int) $store->id }}"
-    data-reverb-app-key="{{ config('broadcasting.connections.reverb.key') }}"
-    data-reverb-host="{{ env('REVERB_HOST', request()->getHost()) }}"
-    data-reverb-port="{{ (int) env('REVERB_PORT', request()->isSecure() ? 443 : 80) }}"
-    data-reverb-scheme="{{ env('REVERB_SCHEME', request()->isSecure() ? 'https' : 'http') }}"
-    data-reverb-path="{{ env('REVERB_PATH', '') }}"
-    data-reverb-channel="catalog.store.{{ (int) $store->id }}"
-    data-reverb-event="catalog.version.changed">
+    data-broadcast-driver="{{ $broadcastDriver }}"
+    data-broadcast-key="{{ (string) ($broadcastConnection['key'] ?? '') }}"
+    data-broadcast-cluster="{{ $broadcastCluster }}"
+    data-broadcast-host="{{ $broadcastHost }}"
+    data-broadcast-port="{{ $broadcastPort }}"
+    data-broadcast-scheme="{{ $broadcastScheme }}"
+    data-broadcast-path="{{ (string) config('reverb.servers.reverb.path', '') }}"
+    data-broadcast-channel="catalog.store.{{ (int) $store->id }}"
+    data-broadcast-event="catalog.version.changed">
     <div class="toolbar">
         <div>
             <small class="eyebrow">Inventario cloud</small>
@@ -178,13 +190,15 @@
     }
 
     let currentVersion = Number(root.dataset.catalogVersion || '0');
-    const appKey = root.dataset.reverbAppKey || '';
-    const host = root.dataset.reverbHost || window.location.hostname;
-    const port = Number(root.dataset.reverbPort || (window.location.protocol === 'https:' ? 443 : 80));
-    const scheme = root.dataset.reverbScheme || (window.location.protocol === 'https:' ? 'https' : 'http');
-    const path = root.dataset.reverbPath || '';
-    const channelName = root.dataset.reverbChannel || '';
-    const eventName = root.dataset.reverbEvent || 'catalog.version.changed';
+    const driver = root.dataset.broadcastDriver || 'null';
+    const appKey = root.dataset.broadcastKey || '';
+    const cluster = root.dataset.broadcastCluster || 'mt1';
+    const host = root.dataset.broadcastHost || window.location.hostname;
+    const port = Number(root.dataset.broadcastPort || (window.location.protocol === 'https:' ? 443 : 80));
+    const scheme = root.dataset.broadcastScheme || (window.location.protocol === 'https:' ? 'https' : 'http');
+    const path = root.dataset.broadcastPath || '';
+    const channelName = root.dataset.broadcastChannel || '';
+    const eventName = root.dataset.broadcastEvent || 'catalog.version.changed';
     const liveStatus = root.querySelector('[data-live-status]');
 
     const setStatus = (text) => {
@@ -193,13 +207,13 @@
         }
     };
 
-    if (!appKey || !channelName) {
+    if (!appKey || !channelName || driver === 'null') {
         setStatus('Actualizacion automatica no disponible en este snapshot.');
         return;
     }
 
-    const reverb = new window.Pusher(appKey, {
-        cluster: 'mt1',
+    const realtime = new window.Pusher(appKey, {
+        cluster,
         wsHost: host,
         wsPort: port,
         wssPort: port,
@@ -209,7 +223,7 @@
         disableStats: true,
     });
 
-    const channel = reverb.subscribe(channelName);
+    const channel = realtime.subscribe(channelName);
     setStatus(`Escuchando cambios del snapshot v${currentVersion}...`);
 
     channel.bind(eventName, (payload) => {
@@ -225,11 +239,11 @@
         setStatus(`Snapshot al dia en v${currentVersion}.`);
     });
 
-    reverb.connection.bind('connected', () => {
+    realtime.connection.bind('connected', () => {
         setStatus(`Snapshot al dia en v${currentVersion}.`);
     });
 
-    reverb.connection.bind('error', () => {
+    realtime.connection.bind('error', () => {
         setStatus('No pude conectar el snapshot cloud en tiempo real.');
     });
 
@@ -242,8 +256,8 @@
     window.addEventListener('beforeunload', () => {
         try {
             channel.unbind_all();
-            reverb.unsubscribe(channelName);
-            reverb.disconnect();
+            realtime.unsubscribe(channelName);
+            realtime.disconnect();
         } catch {
             setStatus('Actualizacion automatica no disponible en este navegador.');
         }

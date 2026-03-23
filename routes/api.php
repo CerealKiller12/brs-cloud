@@ -541,16 +541,21 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
 
 Route::get('/cloud/realtime-config', function (Request $request) use ($resolveStoreContext) {
     $store = $resolveStoreContext($request);
-    $scheme = env('REVERB_SCHEME', $request->isSecure() ? 'https' : 'http');
+    $defaultConnection = (string) config('broadcasting.default', 'null');
+    $connection = (array) config("broadcasting.connections.{$defaultConnection}", []);
+    $options = (array) ($connection['options'] ?? []);
+    $scheme = (string) ($options['scheme'] ?? ($request->isSecure() ? 'https' : 'http'));
     $defaultPort = $scheme === 'https' ? 443 : 80;
 
     return response()->json([
-        'reverb' => [
-            'appKey' => config('broadcasting.connections.reverb.key'),
-            'host' => env('REVERB_HOST', $request->getHost()),
-            'port' => (int) env('REVERB_PORT', $defaultPort),
+        'broadcast' => [
+            'driver' => $defaultConnection,
+            'key' => (string) ($connection['key'] ?? ''),
+            'cluster' => (string) ($options['cluster'] ?? 'mt1'),
+            'host' => (string) ($options['host'] ?? $request->getHost()),
+            'port' => (int) ($options['port'] ?? $defaultPort),
             'scheme' => $scheme,
-            'path' => env('REVERB_PATH', ''),
+            'path' => (string) config('reverb.servers.reverb.path', ''),
         ],
         'channel' => [
             'name' => "catalog.store.{$store->store_row_id}",
