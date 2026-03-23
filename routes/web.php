@@ -457,7 +457,41 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->groupBy('tokenable_id')
             ->pluck('aggregate', 'tokenable_id');
 
-        return view('devices.index', compact('devices', 'tokenCounts', 'deviceStats', 'storeOptions', 'storeNames', 'search', 'storeFilter'));
+        $deviceIds = $devices->getCollection()->pluck('device_id')->filter()->values();
+        $syncHealthByDevice = $deviceIds->isEmpty()
+            ? collect()
+            : DB::table('sync_events')
+                ->select(
+                    'device_id',
+                    DB::raw('count(*) as total_events'),
+                    DB::raw('sum(case when applied_at is not null then 1 else 0 end) as applied_events'),
+                    DB::raw('sum(case when apply_error is not null then 1 else 0 end) as conflict_events'),
+                    DB::raw('max(received_at) as last_event_at')
+                )
+                ->where('tenant_id', $user->tenant_id)
+                ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
+                ->whereIn('device_id', $deviceIds)
+                ->groupBy('device_id')
+                ->get()
+                ->keyBy('device_id');
+
+        $deviceStats['stale'] = (clone $deviceQuery)
+            ->where(function ($query) {
+                $query->whereNull('last_seen_at')
+                    ->orWhere('last_seen_at', '<', now()->subDay());
+            })
+            ->count();
+
+        $conflictedDeviceIds = DB::table('sync_events')
+            ->where('tenant_id', $user->tenant_id)
+            ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
+            ->whereNotNull('apply_error')
+            ->distinct()
+            ->pluck('device_id');
+
+        $deviceStats['withConflicts'] = $conflictedDeviceIds->count();
+
+        return view('devices.index', compact('devices', 'tokenCounts', 'syncHealthByDevice', 'deviceStats', 'storeOptions', 'storeNames', 'search', 'storeFilter'));
     })->name('devices.index');
 
     Route::post('/devices/{deviceId}/revoke-token', function (int $deviceId) {

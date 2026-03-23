@@ -4,7 +4,7 @@
 <section class="hero">
     <small>Devices</small>
     <h2>Cajas y dispositivos</h2>
-    <p>Monitorea ultima conexion, plataforma, version, store ligada y revoca tokens cuando necesites re-enrolar una caja.</p>
+    <p>Monitorea la salud real de cada caja: ultima conexion, ultima sync, conflictos pendientes y necesidad de re-enrolar tokens.</p>
 </section>
 
 @if (session('status'))
@@ -32,6 +32,16 @@
         <div class="stat-value">{{ $deviceStats['seenToday'] }}</div>
         <div class="stat-note">Con check-in reciente al cloud</div>
     </article>
+    <article class="stat">
+        <div class="stat-label">Atrasadas</div>
+        <div class="stat-value">{{ $deviceStats['stale'] }}</div>
+        <div class="stat-note">Sin reportar desde hace mas de 24h</div>
+    </article>
+    <article class="stat">
+        <div class="stat-label">Con conflictos</div>
+        <div class="stat-value">{{ $deviceStats['withConflicts'] }}</div>
+        <div class="stat-note">Cajas con eventos frenados por cloud</div>
+    </article>
 </section>
 
 <section class="card">
@@ -58,25 +68,43 @@
         <thead>
             <tr>
                 <th>Device</th>
+                <th>Salud</th>
                 <th>Store</th>
                 <th>Modo</th>
                 <th>Version</th>
-                <th>Tokens</th>
+                <th>Sync</th>
                 <th>Ultima conexion</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             @forelse ($devices as $device)
+                @php($health = $syncHealthByDevice[$device->device_id] ?? null)
+                @php($isOnline = $device->last_seen_at && \Carbon\Carbon::parse($device->last_seen_at)->gte(now()->subMinutes(10)))
+                @php($isRecent = $device->last_seen_at && \Carbon\Carbon::parse($device->last_seen_at)->gte(now()->subDay()))
+                @php($healthClass = $isOnline ? 'success' : ($isRecent ? '' : 'danger'))
+                @php($healthLabel = $isOnline ? 'En linea' : ($isRecent ? 'Reciente' : 'Atrasada'))
                 <tr>
                     <td>
                         <strong>{{ $device->name ?: $device->device_id }}</strong><br>
                         <span class="muted">{{ $device->device_id }} · {{ strtoupper($device->platform ?: 'n/a') }}</span>
                     </td>
+                    <td>
+                        <span class="pill {{ $healthClass }}">{{ $healthLabel }}</span><br>
+                        <span class="muted">{{ ($tokenCounts[$device->id] ?? 0) > 0 ? 'Token activo' : 'Sin token' }}</span>
+                    </td>
                     <td>{{ $storeNames[$device->store_id] ?? 'Sin store' }}</td>
                     <td>{{ $device->app_mode ?: 'sin modo' }}</td>
                     <td>{{ $device->current_version ?: 'n/a' }}</td>
-                    <td>{{ $tokenCounts[$device->id] ?? 0 }}</td>
+                    <td>
+                        <strong>{{ $health->total_events ?? 0 }} eventos</strong><br>
+                        <span class="muted">
+                            {{ $health->applied_events ?? 0 }} aplicados · {{ $health->conflict_events ?? 0 }} conflictos
+                        </span>
+                        @if (!empty($health?->last_event_at))
+                            <br><span class="muted">{{ \Carbon\Carbon::parse($health->last_event_at)->format('M j, Y · g:i A') }}</span>
+                        @endif
+                    </td>
                     <td>{{ optional($device->last_seen_at)->format('M j, Y · g:i A') ?: 'sin check-in' }}</td>
                     <td>
                         <form method="POST" action="{{ route('devices.revoke-token', $device->id) }}" onsubmit="return confirm('Se revocaran todos los tokens de este device.');">
@@ -87,7 +115,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7"><div class="empty">No hay devices que coincidan con ese filtro.</div></td>
+                    <td colspan="8"><div class="empty">No hay devices que coincidan con ese filtro.</div></td>
                 </tr>
             @endforelse
         </tbody>
