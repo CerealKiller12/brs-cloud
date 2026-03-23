@@ -410,6 +410,8 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $tenantId = $user->tenant_id;
         $store = $resolveStoreForUser($user);
         $storeId = $store->id;
+        $todayStart = now()->copy()->startOfDay();
+        $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
 
         $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
 
@@ -434,6 +436,12 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
                 ->where('track_inventory', true)
                 ->whereColumn('stock_on_hand', '<=', 'reorder_point')
                 ->count(),
+            'salesToday' => DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->where('event_type', 'sale.created')
+                ->where('received_at', '>=', $todayStart)
+                ->count(),
         ];
 
         $recentDevices = Device::query()
@@ -449,6 +457,112 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->latest('received_at')
             ->limit(8)
             ->get();
+
+        $dailyEventCounts = DB::table('sync_events')
+            ->selectRaw('DATE(received_at) as day_key, count(*) as total_events')
+            ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
+            ->where('received_at', '>=', $sevenDaysAgo)
+            ->groupBy('day_key')
+            ->pluck('total_events', 'day_key');
+
+        $dailySalesCounts = DB::table('sync_events')
+            ->selectRaw('DATE(received_at) as day_key, count(*) as total_sales')
+            ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
+            ->where('event_type', 'sale.created')
+            ->where('received_at', '>=', $sevenDaysAgo)
+            ->groupBy('day_key')
+            ->pluck('total_sales', 'day_key');
+
+        $activityTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($dailyEventCounts, $dailySalesCounts) {
+            $day = now()->copy()->subDays($daysAgo);
+            $key = $day->toDateString();
+
+            return [
+                'label' => $day->format('d/m'),
+                'events' => (int) ($dailyEventCounts[$key] ?? 0),
+                'sales' => (int) ($dailySalesCounts[$key] ?? 0),
+            ];
+        })->values();
+
+        $topEventMix = DB::table('sync_events')
+            ->select('event_type', DB::raw('count(*) as aggregate'))
+            ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
+            ->where('received_at', '>=', $sevenDaysAgo)
+            ->groupBy('event_type')
+            ->orderByDesc('aggregate')
+            ->limit(5)
+            ->get()
+            ->map(function ($row) use ($humanizeEventType) {
+                $row->label = $humanizeEventType($row->event_type);
+
+                return $row;
+            });
+
+        $deviceActivity = DB::table('sync_events')
+            ->select('device_id', DB::raw('count(*) as aggregate'))
+            ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
+            ->where('received_at', '>=', $sevenDaysAgo)
+            ->groupBy('device_id')
+            ->orderByDesc('aggregate')
+            ->limit(4)
+            ->get();
+
+        $deviceMetaById = Device::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('device_id', $deviceActivity->pluck('device_id')->filter()->values())
+            ->get(['device_id', 'name', 'platform'])
+            ->keyBy('device_id');
+
+        $deviceActivity = $deviceActivity->map(function ($row) use ($deviceMetaById, $humanizeDeviceLabel) {
+            $meta = $deviceMetaById->get($row->device_id);
+            $row->label = $humanizeDeviceLabel($row->device_id, $meta->name ?? null, $meta->platform ?? null);
+
+            return $row;
+        });
+
+        $lowStockProducts = DB::table('cloud_catalog_products')
+            ->where('store_id', $storeId)
+            ->where('is_active', true)
+            ->where('track_inventory', true)
+            ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+            ->orderBy('stock_on_hand')
+            ->limit(5)
+            ->get(['name', 'sku', 'stock_on_hand', 'reorder_point']);
+
+        $nextSteps = collect([
+            [
+                'done' => $stats['stores'] > 0,
+                'title' => 'Ya tienes una sucursal lista',
+                'detail' => 'Tu operacion principal ya puede recibir cajas y catalogo compartido.',
+                'cta' => route('stores.index'),
+                'ctaLabel' => 'Ver sucursales',
+            ],
+            [
+                'done' => $stats['onlineDevices'] > 0,
+                'title' => 'Conecta al menos una caja',
+                'detail' => 'Una caja conectada te permite operar ventas y sincronizar cambios en vivo.',
+                'cta' => route('devices.index'),
+                'ctaLabel' => 'Ver cajas',
+            ],
+            [
+                'done' => $stats['catalogItems'] > 0,
+                'title' => 'Carga tu catalogo compartido',
+                'detail' => 'Agrega tus productos base para que todas las cajas arranquen con el mismo inventario.',
+                'cta' => route('catalog.index'),
+                'ctaLabel' => 'Abrir catalogo',
+            ],
+            [
+                'done' => $stats['salesToday'] > 0,
+                'title' => 'Haz tu primera venta del dia',
+                'detail' => 'En cuanto una caja cobre, aqui veras el pulso real de tu operacion.',
+                'cta' => route('sync.index'),
+                'ctaLabel' => 'Ver actividad',
+            ],
+        ]);
 
         $recentEventDeviceMeta = Device::query()
             ->where('tenant_id', $tenantId)
@@ -467,7 +581,19 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             return $event;
         });
 
-        return view('dashboard', compact('user', 'tenant', 'store', 'stats', 'recentDevices', 'recentEvents'));
+        return view('dashboard', compact(
+            'user',
+            'tenant',
+            'store',
+            'stats',
+            'recentDevices',
+            'recentEvents',
+            'activityTimeline',
+            'topEventMix',
+            'deviceActivity',
+            'lowStockProducts',
+            'nextSteps'
+        ));
     })->name('dashboard');
 
     Route::get('/stores', function (Request $request) {

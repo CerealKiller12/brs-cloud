@@ -384,6 +384,7 @@
             .row-actions { flex-direction: column; align-items: flex-start; }
         }
     </style>
+    @stack('head')
 </head>
 <body>
 @auth
@@ -437,5 +438,6 @@
 @else
     @yield('content')
 @endauth
+@stack('scripts')
 </body>
 </html>
