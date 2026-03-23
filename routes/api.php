@@ -134,6 +134,42 @@ $resolveStoreContext = function (Request $request) {
     return $store;
 };
 
+$issueDeviceTokenForStore = function (object $store, array $payload, Request $request) {
+    $now = now();
+
+    DB::table('devices')->updateOrInsert(
+        ['device_id' => $payload['device_id']],
+        [
+            'tenant_id' => $store->tenant_id,
+            'store_id' => $store->store_row_id,
+            'name' => $payload['name'] ?? null,
+            'platform' => $payload['platform'],
+            'device_type' => $payload['device_type'] ?? null,
+            'app_mode' => $payload['app_mode'] ?? null,
+            'channel' => 'stable',
+            'branch_name' => $store->store_name,
+            'current_version' => $payload['current_version'] ?? null,
+            'ip_address' => $request->ip(),
+            'metadata_json' => array_key_exists('metadata', $payload) ? json_encode($payload['metadata']) : null,
+            'last_seen_at' => $now,
+            'updated_at' => $now,
+            'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+        ]
+    );
+
+    /** @var Device $device */
+    $device = Device::query()->where('device_id', $payload['device_id'])->firstOrFail();
+    $device->tokens()->where('name', 'device-sync')->delete();
+    $token = $device->createToken('device-sync', ['catalog:read', 'events:write', 'bootstrap:read'])->plainTextToken;
+
+    return response()->json([
+        'token' => $token,
+        'deviceId' => $device->device_id,
+        'storeCode' => $store->store_code,
+        'issuedAt' => $now->toIso8601String(),
+    ]);
+};
+
 Route::post('/auth/login', function (Request $request) {
     $payload = $request->validate([
         'email' => ['required', 'email'],
@@ -197,7 +233,80 @@ Route::middleware('auth:sanctum')->post('/auth/logout', function (Request $reque
     ]);
 });
 
-Route::post('/cloud/device-token', function (Request $request) use ($supportedPlatforms, $resolveStoreContext) {
+Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request $request) {
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+
+    $stores = DB::table('stores')
+        ->where('tenant_id', $user->tenant_id)
+        ->orderBy('name')
+        ->get([
+            'id',
+            'name',
+            'code',
+            'catalog_version as catalogVersion',
+            'is_active as isActive',
+        ]);
+
+    return response()->json([
+        'items' => $stores,
+    ]);
+});
+
+Route::middleware('auth:sanctum')->post('/cloud/admin/device-token', function (Request $request) use ($supportedPlatforms, $issueDeviceTokenForStore) {
+    $payload = $request->validate([
+        'store_id' => ['required', 'integer', 'min:1'],
+        'device_id' => ['required', 'string', 'max:120'],
+        'name' => ['nullable', 'string', 'max:120'],
+        'platform' => ['required', 'string', 'max:40', Rule::in($supportedPlatforms)],
+        'device_type' => ['nullable', 'string', 'max:40'],
+        'app_mode' => ['nullable', 'string', 'max:40'],
+        'current_version' => ['nullable', 'string', 'max:40'],
+        'metadata' => ['nullable', 'array'],
+    ]);
+
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+
+    $store = DB::table('stores')
+        ->join('tenants', 'tenants.id', '=', 'stores.tenant_id')
+        ->select([
+            'stores.id as store_row_id',
+            'stores.tenant_id',
+            'stores.name as store_name',
+            'stores.code as store_code',
+            'stores.timezone',
+            'stores.api_key',
+            'stores.catalog_version',
+            'stores.is_active as store_is_active',
+            'stores.branding_json',
+            'stores.role_access_json',
+            'tenants.name as tenant_name',
+            'tenants.slug as tenant_slug',
+            'tenants.plan_code',
+            'tenants.subscription_status',
+            'tenants.is_active as tenant_is_active',
+        ])
+        ->where('stores.id', $payload['store_id'])
+        ->where('stores.tenant_id', $user->tenant_id)
+        ->first();
+
+    if (!$store) {
+        return response()->json([
+            'message' => 'No encontre esa store dentro de tu tenant en BRS Cloud.',
+        ], 404);
+    }
+
+    if (!(bool) $store->store_is_active || !(bool) $store->tenant_is_active) {
+        return response()->json([
+            'message' => 'La store o el tenant estan inactivos en BRS Cloud.',
+        ], 403);
+    }
+
+    return $issueDeviceTokenForStore($store, $payload, $request);
+});
+
+Route::post('/cloud/device-token', function (Request $request) use ($supportedPlatforms, $resolveStoreContext, $issueDeviceTokenForStore) {
     $payload = $request->validate([
         'device_id' => ['required', 'string', 'max:120'],
         'name' => ['nullable', 'string', 'max:120'],
@@ -209,39 +318,7 @@ Route::post('/cloud/device-token', function (Request $request) use ($supportedPl
     ]);
 
     $store = $resolveStoreContext($request);
-    $now = now();
-
-    DB::table('devices')->updateOrInsert(
-        ['device_id' => $payload['device_id']],
-        [
-            'tenant_id' => $store->tenant_id,
-            'store_id' => $store->store_row_id,
-            'name' => $payload['name'] ?? null,
-            'platform' => $payload['platform'],
-            'device_type' => $payload['device_type'] ?? null,
-            'app_mode' => $payload['app_mode'] ?? null,
-            'channel' => 'stable',
-            'branch_name' => $store->store_name,
-            'current_version' => $payload['current_version'] ?? null,
-            'ip_address' => $request->ip(),
-            'metadata_json' => array_key_exists('metadata', $payload) ? json_encode($payload['metadata']) : null,
-            'last_seen_at' => $now,
-            'updated_at' => $now,
-            'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
-        ]
-    );
-
-    /** @var Device $device */
-    $device = Device::query()->where('device_id', $payload['device_id'])->firstOrFail();
-    $device->tokens()->where('name', 'device-sync')->delete();
-    $token = $device->createToken('device-sync', ['catalog:read', 'events:write', 'bootstrap:read'])->plainTextToken;
-
-    return response()->json([
-        'token' => $token,
-        'deviceId' => $device->device_id,
-        'storeCode' => $store->store_code,
-        'issuedAt' => $now->toIso8601String(),
-    ]);
+    return $issueDeviceTokenForStore($store, $payload, $request);
 });
 
 Route::get('/cloud/health', function () {
