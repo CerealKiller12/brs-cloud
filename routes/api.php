@@ -804,10 +804,12 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                 }
             }
 
-            if ($eventType === 'sale.created' && is_array($eventPayload['items'] ?? null)) {
+            $saleItems = $eventPayload['items'] ?? $eventPayload['sale']['items'] ?? null;
+
+            if ($eventType === 'sale.created' && is_array($saleItems)) {
                 $catalogVersion = null;
 
-                foreach ($eventPayload['items'] as $item) {
+                foreach ($saleItems as $item) {
                     $sku = trim((string) ($item['productSku'] ?? ''));
                     $quantity = (int) round($item['quantity'] ?? 0);
 
