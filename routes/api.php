@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Device;
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -350,6 +351,53 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request 
     return response()->json([
         'items' => $stores,
     ]);
+});
+
+Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) {
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+
+    $payload = $request->validate([
+        'name' => ['required', 'string', 'max:120'],
+        'timezone' => ['nullable', 'string', 'max:60'],
+        'business_name' => ['nullable', 'string', 'max:160'],
+        'terminal_name' => ['nullable', 'string', 'max:120'],
+        'is_active' => ['nullable', 'boolean'],
+    ]);
+
+    $baseCode = 'MATRIZ-001-'.$user->tenant_id;
+    $code = $baseCode;
+    $counter = 1;
+
+    while (Store::query()->where('code', $code)->exists()) {
+        $counter++;
+        $code = $baseCode.'-'.$counter;
+    }
+
+    $store = Store::query()->create([
+        'tenant_id' => $user->tenant_id,
+        'name' => trim($payload['name']),
+        'code' => $code,
+        'timezone' => trim((string) ($payload['timezone'] ?? 'America/Tijuana')) ?: 'America/Tijuana',
+        'api_key' => bin2hex(random_bytes(16)),
+        'catalog_version' => 1,
+        'is_active' => (bool) ($payload['is_active'] ?? true),
+        'branding_json' => [
+            'business_name' => trim((string) ($payload['business_name'] ?? '')) ?: trim($payload['name']),
+            'terminal_name' => trim((string) ($payload['terminal_name'] ?? '')) ?: trim($payload['name']),
+        ],
+        'role_access_json' => null,
+    ]);
+
+    return response()->json([
+        'item' => [
+            'id' => $store->id,
+            'name' => $store->name,
+            'code' => $store->code,
+            'catalogVersion' => (int) $store->catalog_version,
+            'isActive' => (bool) $store->is_active,
+        ],
+    ], 201);
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/device-token', function (Request $request) use ($supportedPlatforms, $issueDeviceTokenForStore) {
