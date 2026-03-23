@@ -55,8 +55,7 @@ Distribución de software:
 
 - `Laravel 13`
 - `Laravel Sanctum`
-- `MySQL` en producción
-- `SQLite` para desarrollo local
+- `MySQL` por default en local y producción
 - `Cloudways`
 
 ## Modelo inicial
@@ -194,6 +193,7 @@ El seeder crea:
 composer install
 cp .env.example .env
 php artisan key:generate
+# configura tu MySQL local o Cloudways en .env
 php artisan migrate:fresh --seed
 php artisan serve
 ```
