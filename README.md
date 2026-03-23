@@ -187,6 +187,40 @@ El seeder crea:
 - usuario owner demo: `owner@bajaretailsystem.demo`
 - password demo: `demo1234`
 
+## Auth social
+
+Se soporta acceso web con:
+
+- `Google`
+- `Apple`
+
+Flujo:
+
+- si el correo ya existe, el usuario entra y se vincula al provider
+- si el correo no existe, se crea automaticamente:
+  - `tenant`
+  - `store` principal
+  - `owner` inicial
+
+Variables necesarias en `.env`:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=https://tu-dominio/auth/google/callback
+
+APPLE_CLIENT_ID=
+APPLE_CLIENT_SECRET=
+APPLE_REDIRECT_URI=https://tu-dominio/auth/apple/callback
+APPLE_TEAM_ID=
+APPLE_KEY_ID=
+```
+
+Importante:
+
+- `Apple` puede regresar al callback por `POST`, por eso la ruta acepta `GET` y `POST`
+- en Cloudways debes registrar exactamente esos redirects en Google Cloud Console y Apple Developer
+
 ## Desarrollo local
 
 ```bash

@@ -7,7 +7,13 @@
         <h1>Entra a BRS Cloud</h1>
         <p>Administra tenant, stores, devices y catalogo compartido desde una sola consola.</p>
 
-        <form method="POST" action="{{ route('login.submit') }}" style="margin-top: 24px;">
+        <div style="display: grid; gap: 12px; margin-top: 24px; margin-bottom: 26px;">
+            <a class="button-secondary" href="{{ route('social.redirect', 'google') }}" style="width: 100%;">Continuar con Google</a>
+            <a class="button-secondary" href="{{ route('social.redirect', 'apple') }}" style="width: 100%;">Continuar con Apple</a>
+            <p class="muted" style="font-size: 14px;">Si no existe cuenta, la creamos al entrar por primera vez con Google o Apple.</p>
+        </div>
+
+        <form method="POST" action="{{ route('login.submit') }}" style="margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px;">
             @csrf
             <div class="field">
                 <label for="email">Correo</label>
@@ -17,7 +23,10 @@
                 <label for="password">Password</label>
                 <input id="password" name="password" type="password" required>
             </div>
-            <button class="button" type="submit">Entrar</button>
+            <div class="row-actions" style="justify-content: space-between; margin-top: 18px;">
+                <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
+                <button class="button" type="submit">Entrar</button>
+            </div>
         </form>
 
         @if ($errors->any())

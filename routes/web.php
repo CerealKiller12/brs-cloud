@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\SocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
 use App\Models\User;
@@ -28,6 +29,13 @@ Route::get('/', function () {
 });
 
 Route::middleware('guest')->group(function () {
+    Route::get('/register', function () {
+        return view('auth.register');
+    })->name('register');
+
+    Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect');
+    Route::match(['GET', 'POST'], '/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback');
+
     Route::get('/login', function () {
         return view('auth.login');
     })->name('login');
