@@ -16,6 +16,88 @@
             radial-gradient(circle at top right, rgba(223, 193, 158, .18), transparent 34%),
             linear-gradient(180deg, rgba(255,255,255,.99) 0%, rgba(246,250,253,.99) 100%);
     }
+    .catalog-editor-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+        gap: 18px;
+        align-items: start;
+    }
+    .catalog-editor-section {
+        display: grid;
+        gap: 14px;
+    }
+    .catalog-section-head {
+        display: grid;
+        gap: 4px;
+    }
+    .catalog-section-head p {
+        font-size: 14px;
+    }
+    .catalog-editor-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px 16px;
+    }
+    .catalog-editor-fields .field {
+        margin-bottom: 0;
+    }
+    .catalog-field-span {
+        grid-column: 1 / -1;
+    }
+    .catalog-editor-side {
+        display: grid;
+        gap: 14px;
+        align-content: start;
+    }
+    .catalog-toggle-card {
+        display: grid;
+        gap: 10px;
+    }
+    .catalog-toggle-control {
+        display: flex;
+        align-items: start;
+        gap: 12px;
+        margin: 0;
+    }
+    .catalog-toggle-control input {
+        width: auto;
+        margin-top: 2px;
+        flex: none;
+    }
+    .catalog-toggle-copy {
+        display: grid;
+        gap: 4px;
+    }
+    .catalog-toggle-copy strong {
+        font-size: 15px;
+        color: var(--text);
+    }
+    .catalog-editor-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .catalog-editor-actions .button {
+        min-width: 180px;
+    }
+    .catalog-editor-tips {
+        display: grid;
+        gap: 10px;
+    }
+    .catalog-editor-tip {
+        display: grid;
+        gap: 2px;
+    }
+    .catalog-editor-tip strong {
+        font-size: 14px;
+        color: var(--text);
+    }
+    .catalog-editor-tip span {
+        font-size: 13px;
+        color: var(--muted);
+    }
     .catalog-store-card {
         display: grid;
         gap: 16px;
@@ -196,11 +278,17 @@
     }
     @media (max-width: 1180px) {
         .catalog-summary,
-        .catalog-store-card {
+        .catalog-store-card,
+        .catalog-editor-body {
             grid-template-columns: 1fr;
         }
 
         .catalog-panel {
+            grid-template-columns: 1fr;
+        }
+    }
+    @media (max-width: 820px) {
+        .catalog-editor-fields {
             grid-template-columns: 1fr;
         }
     }
@@ -257,43 +345,84 @@
                 <span class="pill">Alta manual</span>
             </div>
 
-            <form method="POST" action="{{ route('catalog.store') }}" class="grid grid-2">
+            <form method="POST" action="{{ route('catalog.store') }}">
                 @csrf
+                <div class="catalog-editor-body">
+                    <div class="surface catalog-editor-section">
+                        <div class="catalog-section-head">
+                            <small class="eyebrow">Datos base</small>
+                            <p>Empieza con los datos que tu equipo usa para ubicar el producto rapido en caja y catalogo.</p>
+                        </div>
 
-                <div class="field">
-                    <label for="sku">SKU</label>
-                    <input id="sku" name="sku" value="{{ old('sku') }}" required>
-                </div>
-                <div class="field">
-                    <label for="barcode">Codigo de barras</label>
-                    <input id="barcode" name="barcode" value="{{ old('barcode') }}">
-                </div>
-                <div class="field" style="grid-column: 1 / -1;">
-                    <label for="name">Nombre del producto</label>
-                    <input id="name" name="name" value="{{ old('name') }}" required>
-                </div>
-                <div class="field">
-                    <label for="price">Precio</label>
-                    <input id="price" name="price" type="number" step="0.01" min="0" value="{{ old('price') }}" required>
-                </div>
-                <div class="field">
-                    <label for="cost">Costo</label>
-                    <input id="cost" name="cost" type="number" step="0.01" min="0" value="{{ old('cost') }}">
-                </div>
-                <div class="field">
-                    <label for="stock_on_hand">Stock disponible</label>
-                    <input id="stock_on_hand" name="stock_on_hand" type="number" min="0" value="{{ old('stock_on_hand', 0) }}" required>
-                </div>
-                <div class="field">
-                    <label for="reorder_point">Punto de reorden</label>
-                    <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', 0) }}" required>
-                </div>
-                <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;">
-                    <input id="track_inventory" name="track_inventory" type="checkbox" value="1" {{ old('track_inventory', true) ? 'checked' : '' }} style="width: auto;">
-                    <label for="track_inventory" style="margin: 0;">Controlar inventario desde la nube</label>
-                </div>
-                <div class="row-actions" style="grid-column: 1 / -1;">
-                    <button class="button" type="submit">Crear producto</button>
+                        <div class="catalog-editor-fields">
+                            <div class="field">
+                                <label for="sku">SKU</label>
+                                <input id="sku" name="sku" value="{{ old('sku') }}" placeholder="Ej. PEP-355" required>
+                            </div>
+                            <div class="field">
+                                <label for="barcode">Codigo de barras</label>
+                                <input id="barcode" name="barcode" value="{{ old('barcode') }}" placeholder="Opcional">
+                            </div>
+                            <div class="field catalog-field-span">
+                                <label for="name">Nombre del producto</label>
+                                <input id="name" name="name" value="{{ old('name') }}" placeholder="Ej. Pepsi 355 ml" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="catalog-editor-side">
+                        <div class="surface catalog-editor-section">
+                            <div class="catalog-section-head">
+                                <small class="eyebrow">Precio y stock</small>
+                                <p>Define lo comercial y lo operativo sin bajar hasta el final del formulario.</p>
+                            </div>
+
+                            <div class="catalog-editor-fields">
+                                <div class="field">
+                                    <label for="price">Precio</label>
+                                    <input id="price" name="price" type="number" step="0.01" min="0" value="{{ old('price') }}" placeholder="0.00" required>
+                                </div>
+                                <div class="field">
+                                    <label for="cost">Costo</label>
+                                    <input id="cost" name="cost" type="number" step="0.01" min="0" value="{{ old('cost') }}" placeholder="0.00">
+                                </div>
+                                <div class="field">
+                                    <label for="stock_on_hand">Stock disponible</label>
+                                    <input id="stock_on_hand" name="stock_on_hand" type="number" min="0" value="{{ old('stock_on_hand', 0) }}" required>
+                                </div>
+                                <div class="field">
+                                    <label for="reorder_point">Punto de reorden</label>
+                                    <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', 0) }}" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="surface catalog-toggle-card">
+                            <label class="catalog-toggle-control" for="track_inventory">
+                                <input id="track_inventory" name="track_inventory" type="checkbox" value="1" {{ old('track_inventory', true) ? 'checked' : '' }}>
+                                <div class="catalog-toggle-copy">
+                                    <strong>Controlar inventario desde la nube</strong>
+                                    <span>Activalo cuando quieras que existencias y alertas de reorden se reflejen entre cajas.</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="surface catalog-editor-tips">
+                            <div class="catalog-editor-tip">
+                                <strong>Alta mas rapida</strong>
+                                <span>SKU, nombre y precio son lo minimo para empezar a vender.</span>
+                            </div>
+                            <div class="catalog-editor-tip">
+                                <strong>Mejor control</strong>
+                                <span>Si registras costo y punto de reorden, la sucursal detecta faltantes antes.</span>
+                            </div>
+                        </div>
+
+                        <div class="catalog-editor-actions">
+                            <span class="muted" style="font-size: 13px;">Se publica en esta sucursal y sus cajas conectadas.</span>
+                            <button class="button" type="submit">Crear producto</button>
+                        </div>
+                    </div>
                 </div>
             </form>
         </article>
