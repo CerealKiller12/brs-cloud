@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
-use Laravel\Socialite\Two\InvalidStateException;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
@@ -55,14 +54,7 @@ class SocialAuthController extends Controller
         $returnTo = $this->normalizeAppReturnTo($request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', '')));
 
         try {
-            try {
-                $socialUser = Socialite::driver($provider)->user();
-            } catch (InvalidStateException) {
-                // Some hosted setups lose the session cookie during the OAuth round-trip.
-                // Fall back to stateless mode so login can still complete.
-                $socialUser = Socialite::driver($provider)->stateless()->user();
-            }
-
+            $socialUser = Socialite::driver($provider)->user();
             $email = $socialUser->getEmail();
             $providerIdField = $provider === 'google' ? 'google_id' : 'apple_id';
 
