@@ -18,7 +18,7 @@ use Throwable;
 
 class NativeSocialAuthController extends Controller
 {
-    private const SUPPORTED = ['google'];
+    private const SUPPORTED = ['google', 'apple'];
     private const LOGIN_CODE_CACHE_PREFIX = 'native_social_login:';
 
     public function redirect(Request $request, string $provider): SymfonyRedirectResponse
