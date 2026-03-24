@@ -272,8 +272,10 @@ Route::get('/', function () {
 
     /** @var User|null $user */
     $user = Auth::user();
+    $isAdminHostRequest = ($adminHost = trim((string) config('app.admin_host', ''))) !== ''
+        && strcasecmp(request()->getHost(), $adminHost) === 0;
 
-    return $user?->is_platform_admin
+    return $user?->is_platform_admin && $isAdminHostRequest
         ? redirect()->route('admin.dashboard')
         : redirect()->route('dashboard');
 });
@@ -305,11 +307,14 @@ Route::middleware('guest')->group(function () {
         $request->session()->regenerate();
 
         $user = Auth::user();
+        $adminHost = trim((string) config('app.admin_host', ''));
+        $isAdminHostRequest = $adminHost !== '' && strcasecmp($request->getHost(), $adminHost) === 0;
+        $defaultRoute = $user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index');
 
         return redirect()->intended(
-            $user?->is_platform_admin
+            $user?->is_platform_admin && $isAdminHostRequest
                 ? route('admin.dashboard')
-                : ($user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index'))
+                : $defaultRoute
         );
     })->name('login.submit');
 });

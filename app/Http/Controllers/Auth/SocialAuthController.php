@@ -105,7 +105,10 @@ class SocialAuthController extends Controller
                 ]);
             }
 
-            return $user->is_platform_admin
+            $adminHost = trim((string) config('app.admin_host', ''));
+            $isAdminHostRequest = $adminHost !== '' && strcasecmp($request->getHost(), $adminHost) === 0;
+
+            return $user->is_platform_admin && $isAdminHostRequest
                 ? redirect()->route('admin.dashboard')
                 : ($user->tenant?->onboarding_completed_at
                     ? redirect()->route('dashboard')
