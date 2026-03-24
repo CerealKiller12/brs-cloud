@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\NativeSocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
 use App\Models\User;
@@ -96,6 +97,8 @@ Route::get('/health', function () {
         'timestamp' => now()->toIso8601String(),
     ]);
 });
+
+Route::post('/auth/native/consume', [NativeSocialAuthController::class, 'consume']);
 
 $resolveStoreContext = function (Request $request) {
     $actor = $request->user();

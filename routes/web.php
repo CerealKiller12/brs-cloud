@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\SocialAuthController;
+use App\Http\Controllers\Auth\NativeSocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
 use App\Models\Tenant;
@@ -282,6 +283,8 @@ Route::get('/', function () {
 
 Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect');
 Route::match(['GET', 'POST'], '/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback');
+Route::get('/auth/native/{provider}/redirect', [NativeSocialAuthController::class, 'redirect'])->name('social.native.redirect');
+Route::get('/auth/native/{provider}/callback', [NativeSocialAuthController::class, 'callback'])->name('social.native.callback');
 
 Route::middleware('guest')->group(function () {
     Route::get('/register', function () {
