@@ -104,6 +104,9 @@
         color: #3d566d;
         line-height: 1;
     }
+    .catalog-action.is-hidden {
+        display: none;
+    }
     .catalog-action.primary {
         background: var(--accent);
         color: #fff;
@@ -113,9 +116,14 @@
         background: var(--soft);
         color: #3d566d;
     }
+    .catalog-action.compact {
+        min-height: 36px;
+        padding: 0 14px;
+        font-size: 13px;
+    }
     .catalog-action.danger {
-        width: 40px;
-        min-width: 40px;
+        width: 36px;
+        min-width: 36px;
         padding: 0;
         border-radius: 999px;
         background: #fff1ee;
@@ -375,6 +383,7 @@
                                 form="{{ $inlineFormId }}"
                                 name="name"
                                 value="{{ $item->name }}"
+                                data-catalog-inline-input
                                 aria-label="Nombre del producto">
                             <div class="catalog-meta">
                                 <span class="muted">{{ $item->sku }}{{ $item->barcode ? ' · '.$item->barcode : '' }}</span>
@@ -389,6 +398,7 @@
                                 step="0.01"
                                 min="0"
                                 value="{{ $priceValue }}"
+                                data-catalog-inline-input
                                 aria-label="Precio">
                             @if ($item->cost_cents)
                                 <div class="catalog-meta">
@@ -404,6 +414,7 @@
                                 type="number"
                                 min="0"
                                 value="{{ $item->stock_on_hand }}"
+                                data-catalog-inline-input
                                 aria-label="Stock disponible">
                             @if ($item->track_inventory)
                                 <div class="catalog-meta">
@@ -425,9 +436,9 @@
                                 <input type="hidden" name="is_active" value="{{ $item->is_active ? 1 : 0 }}">
                             </form>
                             <div class="catalog-actions">
-                                <button class="catalog-action primary" type="submit" form="{{ $inlineFormId }}">Guardar</button>
+                                <button class="catalog-action primary is-hidden" type="submit" form="{{ $inlineFormId }}" data-catalog-inline-save>Guardar</button>
                                 <button
-                                    class="catalog-action secondary"
+                                    class="catalog-action secondary compact"
                                     type="button"
                                     data-catalog-edit-open
                                     data-product-id="{{ $item->id }}">
@@ -437,7 +448,7 @@
                                     @csrf
                                     @method('DELETE')
                                     <button
-                                        class="catalog-action danger"
+                                        class="catalog-action danger compact"
                                         type="submit"
                                         aria-label="Eliminar producto"
                                         title="Eliminar producto">
@@ -640,6 +651,37 @@
         modal.setAttribute('aria-hidden', 'false');
     };
 
+    const normalizeValue = (value, type) => {
+        if (type === 'number') {
+            const numeric = Number(value);
+            return Number.isFinite(numeric) ? String(numeric) : '';
+        }
+
+        return String(value ?? '').trim();
+    };
+
+    const updateRowDirtyState = (row) => {
+        if (!row) {
+            return;
+        }
+
+        const nameInput = row.querySelector('[name="name"][data-catalog-inline-input]');
+        const priceInput = row.querySelector('[name="price"][data-catalog-inline-input]');
+        const stockInput = row.querySelector('[name="stock_on_hand"][data-catalog-inline-input]');
+        const saveButton = row.querySelector('[data-catalog-inline-save]');
+
+        if (!nameInput || !priceInput || !stockInput || !saveButton) {
+            return;
+        }
+
+        const isDirty =
+            normalizeValue(nameInput.value, 'text') !== normalizeValue(row.dataset.name, 'text') ||
+            normalizeValue(priceInput.value, 'number') !== normalizeValue(row.dataset.price, 'number') ||
+            normalizeValue(stockInput.value, 'number') !== normalizeValue(row.dataset.stock, 'number');
+
+        saveButton.classList.toggle('is-hidden', !isDirty);
+    };
+
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             connect();
@@ -654,6 +696,15 @@
         filterInput.addEventListener('input', filterRows);
         filterRows();
     }
+
+    rows.forEach((row) => {
+        row.querySelectorAll('[data-catalog-inline-input]').forEach((input) => {
+            input.addEventListener('input', () => updateRowDirtyState(row));
+            input.addEventListener('change', () => updateRowDirtyState(row));
+        });
+
+        updateRowDirtyState(row);
+    });
 
     root.querySelectorAll('[data-catalog-edit-open]').forEach((button) => {
         button.addEventListener('click', () => {
