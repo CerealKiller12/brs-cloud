@@ -92,7 +92,7 @@ $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $in
 Route::get('/health', function () {
     return response()->json([
         'ok' => true,
-        'service' => 'brs-cloud',
+        'service' => 'venpi-cloud',
         'timestamp' => now()->toIso8601String(),
     ]);
 });
@@ -174,12 +174,12 @@ $resolveStoreContext = function (Request $request) {
         }
     }
 
-    $storeCode = $request->header('X-BRS-Store-Code', $request->input('store_code'));
-    $storeKey = $request->header('X-BRS-Store-Key', $request->input('store_key'));
+    $storeCode = $request->header('X-VENPI-Store-Code', $request->input('store_code'));
+    $storeKey = $request->header('X-VENPI-Store-Key', $request->input('store_key'));
 
     if (!$storeCode || !$storeKey) {
         abort(response()->json([
-            'message' => 'Debes enviar X-BRS-Store-Code y X-BRS-Store-Key.',
+            'message' => 'Debes enviar X-VENPI-Store-Code y X-VENPI-Store-Key.',
         ], 401));
     }
 
@@ -471,7 +471,7 @@ Route::post('/cloud/device-token', function (Request $request) use ($supportedPl
 Route::get('/cloud/health', function () {
     return response()->json([
         'ok' => true,
-        'service' => 'brs-cloud',
+        'service' => 'venpi-cloud',
         'capabilities' => [
             'tenants' => true,
             'stores' => true,

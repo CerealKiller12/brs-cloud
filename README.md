@@ -4,8 +4,8 @@ Backend SaaS de `Venpi POS`.
 
 Este repo es independiente de:
 
-- `brs-code`: POS desktop, mobile, local-api y UI offline-first
-- `brs-release`: releases, manifests y distribución de updates
+- `venpi-code`: POS desktop, mobile, local-api y UI offline-first
+- `venpi-release`: releases, manifests y distribución de updates
 
 Aqui vive:
 
@@ -21,7 +21,7 @@ Aqui vive:
 
 ## Arquitectura
 
-### `brs-code`
+### `venpi-code`
 
 Producto operativo local:
 
@@ -30,7 +30,7 @@ Producto operativo local:
 - SQLite local
 - operación offline-first
 
-### `brs-cloud`
+### `venpi-cloud`
 
 Negocio SaaS y consolidación:
 
@@ -44,7 +44,7 @@ Negocio SaaS y consolidación:
 - portal cloud para cliente
 - admin console interna para Venpi
 
-### `brs-release`
+### `venpi-release`
 
 Distribución de software:
 
@@ -84,7 +84,7 @@ Eventos locales que se suben cuando hay conexión.
 
 ## Nomenclatura
 
-En `brs-cloud` los contratos internos siguen usando `tenant` y `store`.
+En `venpi-cloud` los contratos internos siguen usando `tenant` y `store`.
 
 Eso aplica a:
 
@@ -104,7 +104,7 @@ La regla practica es:
 
 ## Consola interna Venpi
 
-`brs-cloud` ahora tiene dos superficies distintas dentro del mismo Laravel:
+`venpi-cloud` ahora tiene dos superficies distintas dentro del mismo Laravel:
 
 - portal cloud del cliente
 - consola interna `admin`
@@ -228,8 +228,8 @@ Authorization: Bearer <token>
 
 ```http
 POST /api/cloud/device-token
-X-BRS-Store-Code: MATRIZ-001
-X-BRS-Store-Key: brs_demo_store_key_001
+X-VENPI-Store-Code: MATRIZ-001
+X-VENPI-Store-Key: venpi_demo_store_key_001
 ```
 
 Payload:
@@ -339,7 +339,7 @@ Importante:
 
 ## OAuth por superficie
 
-`brs-cloud` puede usar clientes OAuth distintos para:
+`venpi-cloud` puede usar clientes OAuth distintos para:
 
 - portal cliente `venpi.mx`
 - admin console `admin.venpi.mx`
@@ -394,7 +394,7 @@ php artisan serve
 Despues de `git pull`, el flujo manual recomendado para este repo es:
 
 ```bash
-cd /Users/marcelcelaya/Documents/BRS-workspace/brs-cloud
+cd /path/to/venpi-cloud
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
 php artisan optimize:clear

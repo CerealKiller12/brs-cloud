@@ -162,7 +162,7 @@ class SocialAuthController extends Controller
         $path = '/'.ltrim((string) ($parts['path'] ?? ''), '/');
 
         if ($scheme === 'capacitor' && $host === 'localhost' && $path === '/cloud-tenant') {
-            return 'brspos://cloud-tenant';
+            return 'venpi://cloud-tenant';
         }
 
         return trim($returnTo);
@@ -182,7 +182,7 @@ class SocialAuthController extends Controller
             return $host === 'localhost';
         }
 
-        if ($scheme === 'brspos') {
+        if ($scheme === 'venpi') {
             return $host === 'cloud-tenant';
         }
 
@@ -210,7 +210,7 @@ class SocialAuthController extends Controller
     ): User {
         $displayName = trim($name ?: Str::before($email, '@')) ?: 'Owner';
         $businessName = trim($displayName).' Retail';
-        $tenantSlugBase = Str::slug($businessName) ?: 'brs-cloud';
+        $tenantSlugBase = Str::slug($businessName) ?: 'venpi-cloud';
         $tenantSlug = $tenantSlugBase;
         $counter = 1;
 
