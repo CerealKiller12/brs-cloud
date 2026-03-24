@@ -18,6 +18,8 @@ use Throwable;
 class SocialAuthController extends Controller
 {
     private const SUPPORTED = ['google', 'apple'];
+    private const APP_RETURN_COOKIE = 'venpi_social_return_to';
+    private const APP_STATE_COOKIE = 'venpi_social_state';
 
     public function redirect(Request $request, string $provider): SymfonyRedirectResponse
     {
@@ -26,10 +28,8 @@ class SocialAuthController extends Controller
         $returnTo = $this->normalizeAppReturnTo(trim((string) $request->query('return_to', '')));
 
         if ($this->isAllowedAppReturnTo($returnTo)) {
-            $request->session()->put('social_return_to', $returnTo);
-
             cookie()->queue(cookie(
-                'brs_social_return_to',
+                self::APP_RETURN_COOKIE,
                 $returnTo,
                 15,
                 '/',
@@ -39,10 +39,31 @@ class SocialAuthController extends Controller
                 false,
                 'lax',
             ));
+
+            $state = Str::random(64);
+
+            cookie()->queue(cookie(
+                self::APP_STATE_COOKIE,
+                $state,
+                15,
+                '/',
+                null,
+                true,
+                true,
+                false,
+                'lax',
+            ));
+
+            return $this->socialiteDriver($request, $provider, true)
+                ->with(['state' => $state])
+                ->redirect();
         } else {
             $request->session()->forget('social_return_to');
-            cookie()->queue(cookie()->forget('brs_social_return_to'));
+            cookie()->queue(cookie()->forget(self::APP_RETURN_COOKIE));
+            cookie()->queue(cookie()->forget(self::APP_STATE_COOKIE));
         }
+
+        $request->session()->put('social_return_to', $returnTo);
 
         return $this->socialiteDriver($request, $provider)->redirect();
     }
@@ -51,10 +72,25 @@ class SocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $returnTo = $this->normalizeAppReturnTo($request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', '')));
+        $appReturnTo = $this->normalizeAppReturnTo(trim((string) $request->cookie(self::APP_RETURN_COOKIE, '')));
+        $isAppReturn = $this->isAllowedAppReturnTo($appReturnTo);
+        $returnTo = $isAppReturn
+            ? $appReturnTo
+            : $this->normalizeAppReturnTo((string) $request->session()->pull('social_return_to', ''));
 
         try {
-            $socialUser = $this->socialiteDriver($request, $provider)->user();
+            if ($isAppReturn) {
+                $expectedState = trim((string) $request->cookie(self::APP_STATE_COOKIE, ''));
+                $providedState = trim((string) $request->query('state', ''));
+
+                abort_if(
+                    $expectedState === '' || ! hash_equals($expectedState, $providedState),
+                    419,
+                    'No pude validar el regreso seguro desde tu cuenta social. Intenta de nuevo.'
+                );
+            }
+
+            $socialUser = $this->socialiteDriver($request, $provider, $isAppReturn)->user();
             $email = $socialUser->getEmail();
             $providerIdField = $provider === 'google' ? 'google_id' : 'apple_id';
 
@@ -97,7 +133,8 @@ class SocialAuthController extends Controller
             if ($this->isAllowedAppReturnTo($returnTo)) {
                 $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
 
-                cookie()->queue(cookie()->forget('brs_social_return_to'));
+                cookie()->queue(cookie()->forget(self::APP_RETURN_COOKIE));
+                cookie()->queue(cookie()->forget(self::APP_STATE_COOKIE));
 
                 return $this->redirectBackToApp($returnTo, [
                     'cloud_token' => $token,
@@ -115,7 +152,8 @@ class SocialAuthController extends Controller
                     : redirect()->route('onboarding.index'));
         } catch (Throwable $exception) {
             if ($this->isAllowedAppReturnTo($returnTo)) {
-                cookie()->queue(cookie()->forget('brs_social_return_to'));
+                cookie()->queue(cookie()->forget(self::APP_RETURN_COOKIE));
+                cookie()->queue(cookie()->forget(self::APP_STATE_COOKIE));
 
                 return $this->redirectBackToApp($returnTo, [
                     'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de Venpi Cloud.',
@@ -126,7 +164,7 @@ class SocialAuthController extends Controller
         }
     }
 
-    private function socialiteDriver(Request $request, string $provider)
+    private function socialiteDriver(Request $request, string $provider, bool $forceStateless = false)
     {
         $configKey = $this->oauthConfigKey($request, $provider);
         $providerConfig = config("services.{$configKey}");
@@ -135,7 +173,9 @@ class SocialAuthController extends Controller
             config(["services.{$provider}" => $providerConfig]);
         }
 
-        return Socialite::driver($provider);
+        $driver = Socialite::driver($provider);
+
+        return $forceStateless ? $driver->stateless() : $driver;
     }
 
     private function oauthConfigKey(Request $request, string $provider): string
