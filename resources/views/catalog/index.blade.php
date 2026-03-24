@@ -8,9 +8,8 @@
     }
     .catalog-top {
         display: grid;
-        grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+        grid-template-columns: 1fr;
         gap: 18px;
-        align-items: start;
     }
     .catalog-editor {
         background:
@@ -20,7 +19,8 @@
     .catalog-store-card {
         display: grid;
         gap: 16px;
-        align-content: start;
+        grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+        align-items: start;
     }
     .catalog-badges {
         display: flex;
@@ -47,6 +47,11 @@
         display: grid;
         gap: 14px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .catalog-store-overview {
+        display: grid;
+        gap: 14px;
+        align-content: start;
     }
     .catalog-search {
         display: flex;
@@ -190,8 +195,8 @@
         border-color: #f6c9bf;
     }
     @media (max-width: 1180px) {
-        .catalog-top,
-        .catalog-summary {
+        .catalog-summary,
+        .catalog-store-card {
             grid-template-columns: 1fr;
         }
 
@@ -294,16 +299,18 @@
         </article>
 
         <article class="card catalog-store-card">
-            <div>
+            <div class="catalog-store-overview">
+                <div>
                 <small class="eyebrow">Sucursal activa</small>
                 <h3>{{ $store->name }}</h3>
                 <p>{{ data_get($store->branding_json, 'business_name', 'Negocio sin nombre visible') }}</p>
-            </div>
+                </div>
 
-            <div class="catalog-badges">
-                <span class="pill">Referencia {{ $store->code }}</span>
-                <span class="pill">Version {{ $store->catalog_version }}</span>
-                <span class="pill">{{ $store->timezone }}</span>
+                <div class="catalog-badges">
+                    <span class="pill">Referencia {{ $store->code }}</span>
+                    <span class="pill">Version {{ $store->catalog_version }}</span>
+                    <span class="pill">{{ $store->timezone }}</span>
+                </div>
             </div>
 
             <div class="catalog-panel">
