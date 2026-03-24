@@ -105,9 +105,11 @@ class SocialAuthController extends Controller
                 ]);
             }
 
-            return $user->tenant?->onboarding_completed_at
-                ? redirect()->route('dashboard')
-                : redirect()->route('onboarding.index');
+            return $user->is_platform_admin
+                ? redirect()->route('admin.dashboard')
+                : ($user->tenant?->onboarding_completed_at
+                    ? redirect()->route('dashboard')
+                    : redirect()->route('onboarding.index'));
         } catch (Throwable $exception) {
             if ($this->isAllowedAppReturnTo($returnTo)) {
                 cookie()->queue(cookie()->forget('brs_social_return_to'));

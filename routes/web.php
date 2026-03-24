@@ -107,6 +107,58 @@ $humanizeDeviceLabel = function (?string $deviceId, ?string $deviceName = null, 
     return 'Caja conectada';
 };
 
+$subscriptionPlanOptions = ['starter', 'growth', 'pro', 'enterprise'];
+$subscriptionStatusOptions = ['trialing', 'active', 'grace_period', 'past_due', 'paused', 'canceled'];
+
+$subscriptionStatusPill = function (?string $status): string {
+    return match ($status) {
+        'active', 'grace_period' => 'success',
+        'past_due', 'paused' => 'warning',
+        'canceled' => 'danger',
+        default => '',
+    };
+};
+
+$adminTenantListingQuery = function () {
+    return Tenant::query()
+        ->withCount(['stores', 'devices', 'users'])
+        ->addSelect([
+            'owner_name' => User::query()
+                ->select('name')
+                ->whereColumn('tenant_id', 'tenants.id')
+                ->orderByRaw("case when role = 'owner' then 0 else 1 end")
+                ->orderBy('id')
+                ->limit(1),
+            'owner_email' => User::query()
+                ->select('email')
+                ->whereColumn('tenant_id', 'tenants.id')
+                ->orderByRaw("case when role = 'owner' then 0 else 1 end")
+                ->orderBy('id')
+                ->limit(1),
+            'sync_events_count' => DB::table('sync_events')
+                ->selectRaw('count(*)')
+                ->whereColumn('tenant_id', 'tenants.id'),
+            'last_event_at' => DB::table('sync_events')
+                ->selectRaw('max(received_at)')
+                ->whereColumn('tenant_id', 'tenants.id'),
+        ])
+        ->orderByDesc('created_at');
+};
+
+$attachAdminTenantMeta = function ($rows) use ($subscriptionStatusPill) {
+    $decorate = fn ($tenant) => tap($tenant, function ($item) use ($subscriptionStatusPill) {
+        $item->status_pill = $subscriptionStatusPill($item->subscription_status);
+    });
+
+    if (method_exists($rows, 'getCollection') && method_exists($rows, 'setCollection')) {
+        $rows->setCollection($rows->getCollection()->map($decorate));
+
+        return $rows;
+    }
+
+    return collect($rows)->map($decorate);
+};
+
 $describeSyncEvent = function (?string $eventType, array $payload): string {
     $sku = trim((string) ($payload['sku'] ?? ''));
     $name = trim((string) ($payload['name'] ?? ''));
@@ -214,9 +266,16 @@ $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $in
 };
 
 Route::get('/', function () {
-    return Auth::check()
-        ? redirect()->route('dashboard')
-        : redirect()->route('login');
+    if (!Auth::check()) {
+        return redirect()->route('login');
+    }
+
+    /** @var User|null $user */
+    $user = Auth::user();
+
+    return $user?->is_platform_admin
+        ? redirect()->route('admin.dashboard')
+        : redirect()->route('dashboard');
 });
 
 Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect');
@@ -247,9 +306,207 @@ Route::middleware('guest')->group(function () {
 
         $user = Auth::user();
 
-        return redirect()->intended($user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index'));
+        return redirect()->intended(
+            $user?->is_platform_admin
+                ? route('admin.dashboard')
+                : ($user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index'))
+        );
     })->name('login.submit');
 });
+
+$registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill) {
+    Route::get('/', function () use ($adminTenantListingQuery, $attachAdminTenantMeta) {
+        $baseQuery = $adminTenantListingQuery();
+
+        $stats = [
+            'tenants' => Tenant::query()->count(),
+            'activeTenants' => Tenant::query()->where('is_active', true)->count(),
+            'trialingTenants' => Tenant::query()->where('subscription_status', 'trialing')->count(),
+            'paidTenants' => Tenant::query()->whereIn('subscription_status', ['active', 'grace_period'])->count(),
+            'attentionTenants' => Tenant::query()
+                ->where(function ($query) {
+                    $query->whereIn('subscription_status', ['past_due', 'paused', 'canceled'])
+                        ->orWhere('is_active', false);
+                })
+                ->count(),
+            'stores' => Store::query()->count(),
+            'devices' => Device::query()->count(),
+            'users' => User::query()->count(),
+            'syncEvents' => DB::table('sync_events')->count(),
+        ];
+
+        $recentTenants = $attachAdminTenantMeta((clone $baseQuery)->limit(5)->get());
+        $attentionTenants = $attachAdminTenantMeta(
+            (clone $baseQuery)
+                ->where(function ($query) {
+                    $query->whereIn('subscription_status', ['past_due', 'paused', 'canceled'])
+                        ->orWhere('is_active', false);
+                })
+                ->limit(5)
+                ->get()
+        );
+
+        return view('admin.dashboard', compact('stats', 'recentTenants', 'attentionTenants'));
+    })->name('dashboard');
+
+    Route::get('/clients', function (Request $request) use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions) {
+        $filters = [
+            'q' => trim((string) $request->query('q', '')),
+            'status' => trim((string) $request->query('status', '')),
+            'plan' => trim((string) $request->query('plan', '')),
+        ];
+
+        $query = $adminTenantListingQuery();
+
+        if ($filters['q'] !== '') {
+            $search = '%'.$filters['q'].'%';
+
+            $query->where(function ($tenantQuery) use ($search) {
+                $tenantQuery
+                    ->where('tenants.name', 'like', $search)
+                    ->orWhere('tenants.slug', 'like', $search)
+                    ->orWhereExists(function ($userQuery) use ($search) {
+                        $userQuery->selectRaw('1')
+                            ->from('users')
+                            ->whereColumn('users.tenant_id', 'tenants.id')
+                            ->where(function ($match) use ($search) {
+                                $match->where('users.name', 'like', $search)
+                                    ->orWhere('users.email', 'like', $search);
+                            });
+                    });
+            });
+        }
+
+        if ($filters['status'] !== '') {
+            $query->where('subscription_status', $filters['status']);
+        }
+
+        if ($filters['plan'] !== '') {
+            $query->where('plan_code', $filters['plan']);
+        }
+
+        $clients = $attachAdminTenantMeta($query->paginate(16)->withQueryString());
+        $statusOptions = $subscriptionStatusOptions;
+        $planOptions = $subscriptionPlanOptions;
+
+        return view('admin.clients.index', compact('clients', 'filters', 'statusOptions', 'planOptions'));
+    })->name('clients.index');
+
+    Route::get('/clients/{tenantId}', function (int $tenantId) use ($subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill) {
+        $tenant = Tenant::query()->findOrFail($tenantId);
+        $owner = User::query()
+            ->where('tenant_id', $tenantId)
+            ->orderByRaw("case when role = 'owner' then 0 else 1 end")
+            ->orderBy('id')
+            ->first();
+
+        $stores = Store::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'catalog_version', 'is_active']);
+
+        $users = User::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'is_active']);
+
+        $stats = [
+            'stores' => Store::query()->where('tenant_id', $tenantId)->count(),
+            'devices' => Device::query()->where('tenant_id', $tenantId)->count(),
+            'users' => User::query()->where('tenant_id', $tenantId)->count(),
+            'syncEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->count(),
+            'lastEventAt' => DB::table('sync_events')->where('tenant_id', $tenantId)->max('received_at'),
+        ];
+
+        $planOptions = $subscriptionPlanOptions;
+        $statusOptions = $subscriptionStatusOptions;
+        $statusPill = $subscriptionStatusPill($tenant->subscription_status);
+
+        return view('admin.clients.show', compact('tenant', 'owner', 'stores', 'users', 'stats', 'planOptions', 'statusOptions', 'statusPill'));
+    })->name('clients.show');
+
+    Route::post('/clients/{tenantId}/profile', function (Request $request, int $tenantId) {
+        $tenant = Tenant::query()->findOrFail($tenantId);
+        $normalizedSlug = Str::slug(trim((string) $request->input('slug'))) ?: $tenant->slug;
+        $request->merge(['slug' => $normalizedSlug]);
+
+        $payload = $request->validate([
+            'tenant_name' => ['required', 'string', 'max:120'],
+            'slug' => ['required', 'string', 'max:120', Rule::unique('tenants', 'slug')->ignore($tenant->id)],
+        ]);
+
+        $tenant->update([
+            'name' => $payload['tenant_name'],
+            'slug' => $normalizedSlug,
+        ]);
+
+        return redirect()->route('admin.clients.show', $tenant->id)->with('status', 'Datos del cliente actualizados.');
+    })->name('clients.profile.update');
+
+    Route::post('/clients/{tenantId}/subscription', function (Request $request, int $tenantId) use ($subscriptionPlanOptions, $subscriptionStatusOptions) {
+        $tenant = Tenant::query()->findOrFail($tenantId);
+
+        $payload = $request->validate([
+            'plan_code' => ['required', 'string', Rule::in($subscriptionPlanOptions)],
+            'subscription_status' => ['required', 'string', Rule::in($subscriptionStatusOptions)],
+            'trial_ends_at' => ['nullable', 'date'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $tenant->update([
+            'plan_code' => $payload['plan_code'],
+            'subscription_status' => $payload['subscription_status'],
+            'trial_ends_at' => $payload['trial_ends_at'] ?: null,
+            'is_active' => (bool) $payload['is_active'],
+        ]);
+
+        return redirect()->route('admin.clients.show', $tenant->id)->with('status', 'Subscripcion del cliente actualizada.');
+    })->name('clients.subscription.update');
+
+    Route::get('/subscriptions', function (Request $request) use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions) {
+        $filters = [
+            'status' => trim((string) $request->query('status', '')),
+            'plan' => trim((string) $request->query('plan', '')),
+        ];
+
+        $query = $adminTenantListingQuery();
+
+        if ($filters['status'] !== '') {
+            $query->where('subscription_status', $filters['status']);
+        }
+
+        if ($filters['plan'] !== '') {
+            $query->where('plan_code', $filters['plan']);
+        }
+
+        $subscriptions = $attachAdminTenantMeta($query->paginate(20)->withQueryString());
+        $statusOptions = $subscriptionStatusOptions;
+        $planOptions = $subscriptionPlanOptions;
+
+        return view('admin.subscriptions.index', compact('subscriptions', 'filters', 'statusOptions', 'planOptions'));
+    })->name('subscriptions.index');
+};
+
+$adminHost = trim((string) config('app.admin_host', ''));
+
+if ($adminHost !== '') {
+    Route::middleware(['auth', 'platform.admin'])
+        ->domain($adminHost)
+        ->name('admin.')
+        ->group($registerAdminRoutes);
+
+    Route::middleware(['auth', 'platform.admin'])->prefix('admin')->group(function () {
+        Route::get('/', fn () => redirect()->route('admin.dashboard'));
+        Route::get('/clients', fn () => redirect()->route('admin.clients.index', request()->query()));
+        Route::get('/clients/{tenantId}', fn (int $tenantId) => redirect()->route('admin.clients.show', $tenantId));
+        Route::get('/subscriptions', fn () => redirect()->route('admin.subscriptions.index', request()->query()));
+    });
+} else {
+    Route::middleware(['auth', 'platform.admin'])
+        ->prefix('admin')
+        ->name('admin.')
+        ->group($registerAdminRoutes);
+}
 
 Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
     Route::post('/logout', function (Request $request) {

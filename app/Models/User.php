@@ -19,6 +19,7 @@ use Laravel\Sanctum\HasApiTokens;
     'password',
     'role',
     'is_active',
+    'is_platform_admin',
     'google_id',
     'apple_id',
     'avatar_url',
@@ -35,6 +36,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'is_platform_admin' => 'boolean',
         ];
     }
 

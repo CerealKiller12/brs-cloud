@@ -16,7 +16,8 @@ Aqui vive:
 - sync offline-first
 - auth cloud con Sanctum
 - base para suscripciones SaaS
-- backoffice cloud
+- portal cloud del cliente
+- consola interna de administracion BRS
 
 ## Arquitectura
 
@@ -40,7 +41,8 @@ Negocio SaaS y consolidación:
 - sync de ventas/eventos
 - entitlements
 - suscripciones
-- backoffice
+- portal cloud para cliente
+- admin console interna para BRS
 
 ### `brs-release`
 
@@ -99,6 +101,90 @@ La regla practica es:
 
 - internals y API: `tenant/store`
 - copy visible para operacion: `negocio/sucursal`
+
+## Consola interna BRS
+
+`brs-cloud` ahora tiene dos superficies distintas dentro del mismo Laravel:
+
+- portal cloud del cliente
+- consola interna `admin`
+
+La separacion actual es por:
+
+- layout distinto
+- rutas `admin.*`
+- middleware `platform.admin`
+- bandera `users.is_platform_admin`
+- host admin configurable con `APP_ADMIN_HOST`
+
+Primera version disponible:
+
+- si `APP_ADMIN_HOST` no esta definido:
+  - `/admin`
+  - `/admin/clients`
+  - `/admin/clients/{tenant}`
+  - `/admin/subscriptions`
+- si `APP_ADMIN_HOST` esta definido:
+  - `https://admin.tu-dominio.com/`
+  - `https://admin.tu-dominio.com/clients`
+  - `https://admin.tu-dominio.com/clients/{tenant}`
+  - `https://admin.tu-dominio.com/subscriptions`
+
+Desde esa consola puedes:
+
+- ver todos los tenants/clientes
+- revisar owner, plan, trial y estado
+- ver sucursales, usuarios y actividad resumida
+- editar `plan_code`
+- editar `subscription_status`
+- extender o quitar `trial_ends_at`
+- activar o suspender un tenant
+
+Por ahora, la “subscripcion” sigue leyendo y editando estos campos del tenant:
+
+- `tenants.plan_code`
+- `tenants.subscription_status`
+- `tenants.trial_ends_at`
+- `tenants.is_active`
+
+Todavia no existe una tabla separada de billing como `subscriptions`.
+
+### Habilitar un admin interno
+
+Primero corre migraciones:
+
+```bash
+php artisan migrate --force
+```
+
+Luego marca manualmente un usuario como admin de plataforma:
+
+```sql
+update users
+set is_platform_admin = 1
+where email = 'tu-correo@dominio.com';
+```
+
+Ese usuario, al iniciar sesion, cae al dashboard interno `/admin`.
+
+### Subdominio admin
+
+Puedes servir el backoffice en un host distinto sin separar el proyecto Laravel.
+
+Ejemplo:
+
+```env
+APP_URL=https://cloud.tu-dominio.com
+APP_ADMIN_HOST=admin.tu-dominio.com
+```
+
+Con eso:
+
+- las rutas `admin.*` se generan sobre `admin.tu-dominio.com`
+- el login de un `is_platform_admin` redirige al host admin
+- el fallback `/admin` solo redirige hacia el host admin
+
+En infraestructura, ambos hosts pueden apuntar al mismo proyecto Laravel.
 
 ## Endpoints base
 
