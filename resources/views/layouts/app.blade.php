@@ -136,6 +136,28 @@
             display: grid;
             gap: 20px;
         }
+        @media (min-width: 821px) {
+            html, body {
+                height: 100%;
+                overflow: hidden;
+            }
+            .shell {
+                min-height: 100dvh;
+                height: 100dvh;
+                overflow: hidden;
+            }
+            .sidebar {
+                min-height: 100dvh;
+                height: 100dvh;
+                overflow: hidden;
+            }
+            .content {
+                min-height: 0;
+                height: 100dvh;
+                overflow-y: auto;
+                align-content: start;
+            }
+        }
         .hero, .card {
             background: var(--panel);
             border: 1px solid var(--line);
