@@ -275,7 +275,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         session(['cloud_active_store_id' => $store->id]);
 
-        return back()->with('status', "Store activa actualizada a {$store->name}.");
+        return back()->with('status', "Sucursal activa actualizada a {$store->name}.");
     })->name('context.store');
 
     Route::get('/settings', function () {
@@ -302,7 +302,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'avatar_url' => $payload['avatar_url'] ?: null,
         ]);
 
-        return redirect()->route('settings.index')->with('status', 'Cuenta cloud actualizada.');
+        return redirect()->route('settings.index')->with('status', 'Cuenta actualizada.');
     })->name('settings.account');
 
     Route::post('/settings/tenant', function (Request $request) {
@@ -326,7 +326,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'branding_json' => $branding,
         ]);
 
-        return redirect()->route('settings.index')->with('status', 'Negocio cloud actualizado.');
+        return redirect()->route('settings.index')->with('status', 'Negocio actualizado.');
     })->name('settings.tenant');
 
     Route::post('/settings/store', function (Request $request) {
@@ -349,7 +349,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'branding_json' => $branding,
         ]);
 
-        return redirect()->route('settings.index')->with('status', 'Store principal actualizada.');
+        return redirect()->route('settings.index')->with('status', 'Sucursal principal actualizada.');
     })->name('settings.store');
 
     Route::get('/onboarding', function () {
@@ -401,7 +401,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'name' => $payload['owner_name'],
         ]);
 
-        return redirect()->route('dashboard')->with('status', 'Onboarding inicial completado.');
+        return redirect()->route('dashboard')->with('status', 'Configuracion inicial completada.');
     })->name('onboarding.store');
 
     Route::get('/dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {

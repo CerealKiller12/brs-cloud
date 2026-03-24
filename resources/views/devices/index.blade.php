@@ -135,7 +135,7 @@
     <article class="stat">
         <div class="stat-label">Escritorio</div>
         <div class="stat-value">{{ $deviceStats['desktop'] }}</div>
-        <div class="stat-note">puntos de venta en desktop</div>
+        <div class="stat-note">puntos de venta en equipos de escritorio</div>
     </article>
     <article class="stat">
         <div class="stat-label">Ultimas 24 horas</div>
@@ -210,7 +210,7 @@
                 <div class="device-highlight">
                     <span class="stat-label">Entorno escritorio</span>
                     <strong>{{ $deviceStats['desktop'] }}</strong>
-                    <span class="muted">operando en cajas desktop</span>
+                    <span class="muted">operando en cajas de escritorio</span>
                 </div>
             </div>
         </article>

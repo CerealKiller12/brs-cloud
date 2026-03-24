@@ -358,7 +358,7 @@
     <article class="card">
         <div class="section-title">
             <div>
-                <small class="eyebrow">Checklist</small>
+                <small class="eyebrow">Pendientes clave</small>
                 <h3>Lo importante para dejarlo listo</h3>
             </div>
             <p>Este panel te dice rapido si ya resolviste lo minimo para operar sin friccion.</p>
