@@ -174,7 +174,7 @@
 
             <div class="catalog-badges">
                 <span class="pill">Referencia {{ $store->code }}</span>
-                <span class="pill">Catalogo version {{ $store->catalog_version }}</span>
+                <span class="pill">Version {{ $store->catalog_version }}</span>
                 <span class="pill">{{ $store->timezone }}</span>
             </div>
 
@@ -182,7 +182,7 @@
                 <div class="surface">
                     <small class="eyebrow">Sincronizacion</small>
                     <strong style="display:block; font-size: 18px; margin-bottom: 4px;">Catalogo actualizado automaticamente</strong>
-                    <p>Si una caja o esta misma nube cambia productos o stock, esta vista se mantiene escuchando la version mas reciente.</p>
+                    <p>Si una caja o esta misma pagina cambia productos o existencias, esta vista se mantiene escuchando la version mas reciente.</p>
                 </div>
                 <div class="surface">
                     <small class="eyebrow">Ultima actualizacion</small>
@@ -271,7 +271,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6"><div class="empty">No hay productos que coincidan con la busqueda actual.</div></td>
+                        <td colspan="6"><div class="empty">No encontramos productos con ese criterio. Prueba con otro nombre, SKU o codigo.</div></td>
                     </tr>
                 @endforelse
             </tbody>
@@ -335,7 +335,7 @@
         });
 
         source.onerror = () => {
-            setStatus('Esperando reconexion del catalogo cloud...');
+            setStatus('Esperando reconexion del catalogo compartido...');
         };
     };
 

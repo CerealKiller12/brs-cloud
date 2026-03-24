@@ -14,14 +14,14 @@ use Illuminate\Support\Facades\View;
 use Illuminate\Validation\Rule;
 
 $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
-    abort_unless($user->tenant_id, 403, 'El usuario cloud no tiene tenant asignado.');
+    abort_unless($user->tenant_id, 403, 'Esta cuenta todavia no tiene un negocio asignado.');
 
     $stores = Store::query()
         ->where('tenant_id', $user->tenant_id)
         ->orderBy('name')
         ->get(['id', 'name', 'code', 'catalog_version', 'timezone', 'is_active']);
 
-    abort_unless($stores->isNotEmpty(), 403, 'El tenant cloud no tiene stores configuradas.');
+    abort_unless($stores->isNotEmpty(), 403, 'Este negocio todavia no tiene sucursales configuradas.');
 
     $preferredStoreId = $requestedStoreId ?: session('cloud_active_store_id') ?: $user->store_id;
     $activeStore = $stores->firstWhere('id', $preferredStoreId) ?? $stores->first();
@@ -668,7 +668,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index')->with('status', 'Store creada en BRS Cloud.');
+        return redirect()->route('stores.index')->with('status', 'Sucursal creada correctamente.');
     })->name('stores.store');
 
     Route::put('/stores/{storeId}', function (Request $request, int $storeId) {
@@ -701,7 +701,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index')->with('status', 'Store actualizada.');
+        return redirect()->route('stores.index')->with('status', 'Sucursal actualizada.');
     })->name('stores.update');
 
     Route::post('/stores/{storeId}/rotate-key', function (int $storeId) {
@@ -718,7 +718,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index', ['edit' => $storeId])->with('status', 'Store key regenerada.');
+        return redirect()->route('stores.index', ['edit' => $storeId])->with('status', 'Se renovo el acceso para nuevas cajas en esta sucursal.');
     })->name('stores.rotate-key');
 
     Route::get('/devices', function (Request $request) use ($resolveStoreForUser) {
@@ -816,7 +816,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->where('tokenable_id', $device->id)
             ->delete();
 
-        return redirect()->route('devices.index')->with('status', 'Tokens del device revocados.');
+        return redirect()->route('devices.index')->with('status', 'Se cerro el acceso vigente de esta caja.');
     })->name('devices.revoke-token');
 
     Route::get('/sync', function (Request $request) use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
@@ -998,7 +998,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('catalog.index')->with('status', 'Producto creado en el catalogo cloud.');
+        return redirect()->route('catalog.index')->with('status', 'Producto agregado al catalogo compartido.');
     })->name('catalog.store');
 
     Route::put('/catalog/{productId}', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
@@ -1051,7 +1051,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
                 'updated_at' => now(),
             ]);
 
-        return redirect()->route('catalog.index')->with('status', 'Producto actualizado en el catalogo cloud.');
+        return redirect()->route('catalog.index')->with('status', 'Producto actualizado en el catalogo compartido.');
     })->name('catalog.update');
 
     Route::post('/catalog/{productId}/toggle', function (int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
@@ -1091,7 +1091,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ['page' => request()->query('page'), 'q' => request()->query('q')]
         )->with(
             'status',
-            ((bool) $product->is_active ? 'Producto desactivado' : 'Producto reactivado').' en el catalogo cloud.'
+            ((bool) $product->is_active ? 'Producto pausado' : 'Producto reactivado').' en el catalogo compartido.'
         );
     })->name('catalog.toggle');
 
@@ -1124,6 +1124,6 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         return redirect()->route(
             'catalog.index',
             ['page' => $request->query('page'), 'q' => $request->query('q')]
-        )->with('status', 'Producto eliminado del catalogo cloud.');
+        )->with('status', 'Producto eliminado del catalogo compartido.');
     })->name('catalog.destroy');
 });

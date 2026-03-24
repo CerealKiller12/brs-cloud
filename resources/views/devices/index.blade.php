@@ -242,10 +242,10 @@
                                     <span class="pill {{ $healthClass }}">{{ $healthLabel }}</span>
                                     <span class="pill">{{ $storeNames[$device->store_id] ?? 'Sin sucursal' }}</span>
                                     <span class="pill">{{ $device->platform === 'ios' ? 'iPad / iPhone' : ($device->platform === 'desktop' ? 'Escritorio' : ($device->platform ?: 'Sin definir')) }}</span>
-                                    <span class="pill">{{ $device->current_version ?: 'Version no disponible' }}</span>
+                                    <span class="pill">{{ $device->current_version ?: 'Version sin registrar' }}</span>
                                 </div>
                             </div>
-                            <span class="pill">{{ ($tokenCounts[$device->id] ?? 0) > 0 ? 'Acceso activo' : 'Sin acceso activo' }}</span>
+                            <span class="pill">{{ ($tokenCounts[$device->id] ?? 0) > 0 ? 'Acceso vigente' : 'Sin acceso vigente' }}</span>
                         </div>
 
                         <div class="device-health">
@@ -270,7 +270,7 @@
                     <div class="device-side">
                         <div class="device-stamp">
                             <strong style="display:block; color: var(--text); margin-bottom: 4px;">Ultima actividad</strong>
-                            {{ optional($device->last_seen_at)->format('M j, Y · g:i A') ?: 'Sin check-in reciente' }}
+                            {{ optional($device->last_seen_at)->format('M j, Y · g:i A') ?: 'Sin registro reciente' }}
                         </div>
 
                         @if (!empty($health?->last_event_at))
@@ -280,9 +280,9 @@
                             </div>
                         @endif
 
-                        <form method="POST" action="{{ route('devices.revoke-token', $device->id) }}" onsubmit="return confirm('Se revocaran todos los tokens de esta caja.');">
+                        <form method="POST" action="{{ route('devices.revoke-token', $device->id) }}" onsubmit="return confirm('Se cerrara el acceso actual de esta caja.');">
                             @csrf
-                            <button class="button-danger" type="submit">Desvincular acceso</button>
+                            <button class="button-danger" type="submit">Cerrar acceso</button>
                         </form>
                     </div>
                 </article>
