@@ -10,6 +10,7 @@
         display: grid;
         grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
         gap: 18px;
+        align-items: start;
     }
     .catalog-editor {
         background:
@@ -19,6 +20,7 @@
     .catalog-store-card {
         display: grid;
         gap: 16px;
+        align-content: start;
     }
     .catalog-badges {
         display: flex;
@@ -44,6 +46,7 @@
     .catalog-panel {
         display: grid;
         gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .catalog-search {
         display: flex;
@@ -189,6 +192,10 @@
     @media (max-width: 1180px) {
         .catalog-top,
         .catalog-summary {
+            grid-template-columns: 1fr;
+        }
+
+        .catalog-panel {
             grid-template-columns: 1fr;
         }
     }
