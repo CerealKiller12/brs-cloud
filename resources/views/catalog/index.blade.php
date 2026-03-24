@@ -88,6 +88,40 @@
         align-items: center;
         flex-wrap: wrap;
     }
+    .catalog-action {
+        min-height: 40px;
+        padding: 0 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        background: var(--soft);
+        color: #3d566d;
+        line-height: 1;
+    }
+    .catalog-action.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+    }
+    .catalog-action.secondary {
+        background: var(--soft);
+        color: #3d566d;
+    }
+    .catalog-action.danger {
+        width: 40px;
+        min-width: 40px;
+        padding: 0;
+        border-radius: 999px;
+        background: #fff1ee;
+        border-color: #e8c4bc;
+        color: #ae4c3b;
+    }
     .catalog-filter-empty {
         display: none;
         border: 1px dashed var(--line);
@@ -391,9 +425,9 @@
                                 <input type="hidden" name="is_active" value="{{ $item->is_active ? 1 : 0 }}">
                             </form>
                             <div class="catalog-actions">
-                                <button class="button-secondary" type="submit" form="{{ $inlineFormId }}">Guardar</button>
+                                <button class="catalog-action primary" type="submit" form="{{ $inlineFormId }}">Guardar</button>
                                 <button
-                                    class="pill"
+                                    class="catalog-action secondary"
                                     type="button"
                                     data-catalog-edit-open
                                     data-product-id="{{ $item->id }}">
@@ -403,10 +437,10 @@
                                     @csrf
                                     @method('DELETE')
                                     <button
+                                        class="catalog-action danger"
                                         type="submit"
                                         aria-label="Eliminar producto"
-                                        title="Eliminar producto"
-                                        style="width: 34px; height: 34px; display: inline-grid; place-items: center; border-radius: 999px; border: 1px solid #e8c4bc; background: #fff1ee; color: #ae4c3b; cursor: pointer;">
+                                        title="Eliminar producto">
                                         <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; fill: currentColor;">
                                             <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v8H8V9Zm6 0h2v8h-2V9ZM7 9h10l-.8 10.2A2 2 0 0 1 14.2 21H9.8a2 2 0 0 1-1.99-1.8L7 9Z" />
                                         </svg>
