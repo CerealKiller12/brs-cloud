@@ -29,6 +29,8 @@ class SocialAuthController extends Controller
         $returnTo = $this->normalizeAppReturnTo(trim((string) $request->query('return_to', '')));
 
         if ($this->isAllowedAppReturnTo($returnTo)) {
+            $request->session()->put('social_return_to', $returnTo);
+
             cookie()->queue(cookie(
                 self::APP_RETURN_COOKIE,
                 $returnTo,
@@ -42,6 +44,7 @@ class SocialAuthController extends Controller
             ));
 
             $state = Str::random(64);
+            $request->session()->put('social_app_state', $state);
 
             cookie()->queue(cookie(
                 self::APP_STATE_COOKIE,
@@ -73,7 +76,8 @@ class SocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $appReturnTo = $this->normalizeAppReturnTo(trim((string) $request->cookie(self::APP_RETURN_COOKIE, '')));
+        $appReturnTo = $this->normalizeAppReturnTo(trim((string) $request->cookie(self::APP_RETURN_COOKIE, '')))
+            ?: $this->normalizeAppReturnTo((string) $request->session()->get('social_return_to', ''));
         $isAppReturn = $this->isAllowedAppReturnTo($appReturnTo);
         $returnTo = $isAppReturn
             ? $appReturnTo
@@ -81,7 +85,8 @@ class SocialAuthController extends Controller
 
         try {
             if ($isAppReturn) {
-                $expectedState = trim((string) $request->cookie(self::APP_STATE_COOKIE, ''));
+                $expectedState = trim((string) $request->cookie(self::APP_STATE_COOKIE, ''))
+                    ?: trim((string) $request->session()->pull('social_app_state', ''));
                 $providedState = trim((string) $request->query('state', ''));
 
                 abort_if(
@@ -132,6 +137,7 @@ class SocialAuthController extends Controller
             $request->session()->regenerate();
 
             if ($this->isAllowedAppReturnTo($returnTo)) {
+                $request->session()->forget(['social_return_to', 'social_app_state']);
                 $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
 
                 cookie()->queue(cookie()->forget(self::APP_RETURN_COOKIE));
@@ -153,6 +159,7 @@ class SocialAuthController extends Controller
                     : redirect()->route('onboarding.index'));
         } catch (Throwable $exception) {
             if ($this->isAllowedAppReturnTo($returnTo)) {
+                $request->session()->forget(['social_return_to', 'social_app_state']);
                 report($exception);
 
                 $message = trim($exception->getMessage());
