@@ -28,11 +28,25 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'google_admin' => [
+        'client_id' => env('GOOGLE_ADMIN_CLIENT_ID', env('GOOGLE_CLIENT_ID')),
+        'client_secret' => env('GOOGLE_ADMIN_CLIENT_SECRET', env('GOOGLE_CLIENT_SECRET')),
+        'redirect' => env('GOOGLE_ADMIN_REDIRECT_URI', env('GOOGLE_REDIRECT_URI')),
+    ],
+
     'apple' => [
         'client_id' => env('APPLE_CLIENT_ID'),
         'client_secret' => env('APPLE_CLIENT_SECRET'),
         'redirect' => env('APPLE_REDIRECT_URI'),
         'team_id' => env('APPLE_TEAM_ID'),
         'key_id' => env('APPLE_KEY_ID'),
+    ],
+
+    'apple_admin' => [
+        'client_id' => env('APPLE_ADMIN_CLIENT_ID', env('APPLE_CLIENT_ID')),
+        'client_secret' => env('APPLE_ADMIN_CLIENT_SECRET', env('APPLE_CLIENT_SECRET')),
+        'redirect' => env('APPLE_ADMIN_REDIRECT_URI', env('APPLE_REDIRECT_URI')),
+        'team_id' => env('APPLE_ADMIN_TEAM_ID', env('APPLE_TEAM_ID')),
+        'key_id' => env('APPLE_ADMIN_KEY_ID', env('APPLE_KEY_ID')),
     ],
 ];

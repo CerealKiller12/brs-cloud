@@ -44,7 +44,7 @@ class SocialAuthController extends Controller
             cookie()->queue(cookie()->forget('brs_social_return_to'));
         }
 
-        return Socialite::driver($provider)->redirect();
+        return $this->socialiteDriver($request, $provider)->redirect();
     }
 
     public function callback(Request $request, string $provider): RedirectResponse
@@ -54,7 +54,7 @@ class SocialAuthController extends Controller
         $returnTo = $this->normalizeAppReturnTo($request->session()->pull('social_return_to') ?: trim((string) $request->cookie('brs_social_return_to', '')));
 
         try {
-            $socialUser = Socialite::driver($provider)->user();
+            $socialUser = $this->socialiteDriver($request, $provider)->user();
             $email = $socialUser->getEmail();
             $providerIdField = $provider === 'google' ? 'google_id' : 'apple_id';
 
@@ -124,6 +124,30 @@ class SocialAuthController extends Controller
 
             throw $exception;
         }
+    }
+
+    private function socialiteDriver(Request $request, string $provider)
+    {
+        $configKey = $this->oauthConfigKey($request, $provider);
+        $providerConfig = config("services.{$configKey}");
+
+        if (is_array($providerConfig) && $providerConfig !== []) {
+            config(["services.{$provider}" => $providerConfig]);
+        }
+
+        return Socialite::driver($provider);
+    }
+
+    private function oauthConfigKey(Request $request, string $provider): string
+    {
+        return $this->usesAdminOauthSurface($request) ? "{$provider}_admin" : $provider;
+    }
+
+    private function usesAdminOauthSurface(Request $request): bool
+    {
+        $adminHost = trim((string) config('app.admin_host', ''));
+
+        return $adminHost !== '' && strcasecmp($request->getHost(), $adminHost) === 0;
     }
 
     private function normalizeAppReturnTo(?string $returnTo): string

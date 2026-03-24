@@ -315,17 +315,68 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=https://tu-dominio/auth/google/callback
 
+GOOGLE_ADMIN_CLIENT_ID=
+GOOGLE_ADMIN_CLIENT_SECRET=
+GOOGLE_ADMIN_REDIRECT_URI=https://admin.tu-dominio.com/auth/google/callback
+
 APPLE_CLIENT_ID=
 APPLE_CLIENT_SECRET=
 APPLE_REDIRECT_URI=https://tu-dominio/auth/apple/callback
 APPLE_TEAM_ID=
 APPLE_KEY_ID=
+
+APPLE_ADMIN_CLIENT_ID=
+APPLE_ADMIN_CLIENT_SECRET=
+APPLE_ADMIN_REDIRECT_URI=https://admin.tu-dominio.com/auth/apple/callback
+APPLE_ADMIN_TEAM_ID=
+APPLE_ADMIN_KEY_ID=
 ```
 
 Importante:
 
 - `Apple` puede regresar al callback por `POST`, por eso la ruta acepta `GET` y `POST`
 - en Cloudways debes registrar exactamente esos redirects en Google Cloud Console y Apple Developer
+
+## OAuth por superficie
+
+`brs-cloud` puede usar clientes OAuth distintos para:
+
+- portal cliente `venpi.mx`
+- admin console `admin.venpi.mx`
+
+Comportamiento:
+
+- si el request entra por el host admin, usa `GOOGLE_ADMIN_*` o `APPLE_ADMIN_*`
+- si esas variables no estan definidas, hace fallback a `GOOGLE_*` y `APPLE_*`
+- si el request entra por el host principal, usa los clientes normales
+
+Configuracion recomendada en Google:
+
+- Cliente OAuth 1: `BRS Cloud Web`
+  - origin: `https://venpi.mx`
+  - redirect: `https://venpi.mx/auth/google/callback`
+- Cliente OAuth 2: `BRS Admin Web`
+  - origin: `https://admin.venpi.mx`
+  - redirect: `https://admin.venpi.mx/auth/google/callback`
+
+Configuracion equivalente sugerida en `.env`:
+
+```env
+APP_URL=https://venpi.mx
+APP_ADMIN_HOST=admin.venpi.mx
+
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://venpi.mx/auth/google/callback
+
+GOOGLE_ADMIN_CLIENT_ID=...
+GOOGLE_ADMIN_CLIENT_SECRET=...
+GOOGLE_ADMIN_REDIRECT_URI=https://admin.venpi.mx/auth/google/callback
+
+SESSION_DOMAIN=.venpi.mx
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=lax
+```
 
 ## Desarrollo local
 
