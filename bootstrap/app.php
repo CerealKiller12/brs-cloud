@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'cloud.surface' => \App\Http\Middleware\EnsureCloudSurface::class,
             'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class,
         ]);
     })
