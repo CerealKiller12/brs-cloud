@@ -852,6 +852,22 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             ->get(['id', 'name']);
 
         $storeNames = $storeOptions->pluck('name', 'id');
+        $deviceSuggestions = Device::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
+            ->orderBy('name')
+            ->limit(80)
+            ->get(['device_id', 'name', 'platform'])
+            ->map(function ($device) {
+                return trim(collect([
+                    $device->name,
+                    $device->device_id,
+                    $device->platform,
+                ])->filter()->implode(' · '));
+            })
+            ->filter()
+            ->unique()
+            ->values();
 
         $tokenCounts = DB::table('personal_access_tokens')
             ->select('tokenable_id', DB::raw('count(*) as aggregate'))
@@ -893,7 +909,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
 
         $deviceStats['withConflicts'] = $conflictedDeviceIds->count();
 
-        return view('devices.index', compact('devices', 'tokenCounts', 'syncHealthByDevice', 'deviceStats', 'storeOptions', 'storeNames', 'search', 'storeFilter'));
+        return view('devices.index', compact('devices', 'tokenCounts', 'syncHealthByDevice', 'deviceStats', 'storeOptions', 'storeNames', 'deviceSuggestions', 'search', 'storeFilter'));
     })->name('devices.index');
 
     Route::post('/devices/{deviceId}/revoke-token', function (int $deviceId) {
@@ -998,7 +1014,6 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
         $search = trim((string) $request->query('q', ''));
-        $editId = $request->integer('edit');
 
         $catalogQuery = DB::table('cloud_catalog_products')
             ->where('store_id', $store->id)
@@ -1028,18 +1043,27 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
                 ->max('updated_at'),
         ];
 
-        $editProduct = null;
-        if ($editId) {
-            $editProduct = DB::table('cloud_catalog_products')
-                ->where('store_id', $store->id)
-                ->where('id', $editId)
-                ->first();
-        }
+        $catalogSuggestions = DB::table('cloud_catalog_products')
+            ->where('store_id', $store->id)
+            ->orderBy('name')
+            ->limit(80)
+            ->get(['name', 'sku', 'barcode'])
+            ->flatMap(function ($product) {
+                return collect([
+                    $product->name,
+                    $product->sku,
+                    $product->barcode,
+                ])->filter();
+            })
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
 
         return view('catalog.index', [
             'catalog' => $catalog,
             'catalogStats' => $catalogStats,
-            'editProduct' => $editProduct,
+            'catalogSuggestions' => $catalogSuggestions,
             'store' => $store,
             'search' => $search,
         ]);
@@ -1114,6 +1138,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             'stock_on_hand' => ['required', 'integer', 'min:0'],
             'reorder_point' => ['required', 'integer', 'min:0'],
             'track_inventory' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
         ]);
 
         $nextVersion = $bumpCatalogVersion($store->id);
@@ -1141,6 +1166,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
                 'stock_on_hand' => $payload['stock_on_hand'],
                 'reorder_point' => $payload['reorder_point'],
                 'track_inventory' => (bool) ($payload['track_inventory'] ?? false),
+                'is_active' => (bool) ($payload['is_active'] ?? false),
                 'catalog_version' => $nextVersion,
                 'updated_at' => now(),
             ]);

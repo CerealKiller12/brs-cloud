@@ -89,6 +89,9 @@
         font-size: 14px;
         text-align: right;
     }
+    .device-card.is-hidden {
+        display: none;
+    }
     @media (max-width: 1180px) {
         .devices-top,
         .device-highlights,
@@ -167,7 +170,13 @@
             <form method="GET" action="{{ route('devices.index') }}" class="grid grid-2">
                 <div class="field" style="grid-column: 1 / -1;">
                     <label for="q">Buscar caja</label>
-                    <input id="q" name="q" value="{{ $search }}" placeholder="Nombre de caja, plataforma o modo">
+                    <input id="q" name="q" value="{{ $search }}" placeholder="Nombre de caja, plataforma o modo" list="device-suggestions" autocomplete="off" data-device-filter-input>
+                    <datalist id="device-suggestions">
+                        @foreach ($deviceSuggestions as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                        @endforeach
+                    </datalist>
+                    <span class="muted" style="font-size: 13px;">Escribe unas letras y te iremos sugiriendo cajas parecidas.</span>
                 </div>
                 <div class="field">
                     <label for="store_id">Sucursal</label>
@@ -233,7 +242,10 @@
                 @php($healthClass = $isOnline ? 'success' : ($isRecent ? '' : 'danger'))
                 @php($healthLabel = $isOnline ? 'En linea' : ($isRecent ? 'Reciente' : 'Atrasada'))
                 @php($deviceLabel = $device->name ?: ($device->platform === 'ios' ? 'Caja iPad' : ($device->platform === 'desktop' ? 'Caja de escritorio' : 'Caja conectada')))
-                <article class="device-card">
+                <article
+                    class="device-card"
+                    data-device-card
+                    data-search="{{ mb_strtolower(collect([$deviceLabel, $device->device_id, $device->platform, $storeNames[$device->store_id] ?? ''])->implode(' ')) }}">
                     <div class="device-card-main">
                         <div class="device-card-head">
                             <div>
@@ -294,4 +306,30 @@
         <div class="pagination">{{ $devices->links() }}</div>
     </section>
 </section>
+
+@push('scripts')
+<script>
+(() => {
+    const input = document.querySelector('[data-device-filter-input]');
+    const cards = Array.from(document.querySelectorAll('[data-device-card]'));
+
+    if (!input || !cards.length) {
+        return;
+    }
+
+    const filterCards = () => {
+        const query = input.value.trim().toLowerCase();
+
+        cards.forEach((card) => {
+            const haystack = card.dataset.search || '';
+            const matches = query === '' || haystack.includes(query);
+            card.classList.toggle('is-hidden', !matches);
+        });
+    };
+
+    input.addEventListener('input', filterCards);
+    filterCards();
+})();
+</script>
+@endpush
 @endsection
