@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
@@ -152,11 +153,23 @@ class SocialAuthController extends Controller
                     : redirect()->route('onboarding.index'));
         } catch (Throwable $exception) {
             if ($this->isAllowedAppReturnTo($returnTo)) {
+                report($exception);
+
+                $message = trim($exception->getMessage());
+
+                if ($message === '' && $exception instanceof InvalidStateException) {
+                    $message = 'No pude validar el regreso seguro desde tu cuenta social. Intenta de nuevo.';
+                }
+
+                if ($message === '') {
+                    $message = 'No pude completar el login social en Venpi Cloud.';
+                }
+
                 cookie()->queue(cookie()->forget(self::APP_RETURN_COOKIE));
                 cookie()->queue(cookie()->forget(self::APP_STATE_COOKIE));
 
                 return $this->redirectBackToApp($returnTo, [
-                    'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de Venpi Cloud.',
+                    'cloud_error' => $message,
                 ]);
             }
 
