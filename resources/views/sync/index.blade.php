@@ -80,8 +80,32 @@
         font-size: 14px;
     }
     .timeline-note {
-        padding-left: 16px;
+        padding: 14px 16px 14px 18px;
+        border-radius: 18px;
+        background: #f7fafc;
+        border: 1px solid var(--line);
         border-left: 3px solid #d6e4f0;
+    }
+    .timeline-note.danger {
+        background: rgba(255, 244, 242, .92);
+        border-color: rgba(229, 111, 84, .22);
+        border-left-color: #e56f54;
+    }
+    .timeline-note.success {
+        background: rgba(242, 250, 245, .92);
+        border-color: rgba(82, 145, 103, .22);
+        border-left-color: #529167;
+    }
+    .timeline-note.pending {
+        background: rgba(246, 249, 252, .96);
+    }
+    .timeline-note strong {
+        display: block;
+        margin-bottom: 8px;
+    }
+    .timeline-note p {
+        margin: 0;
+        line-height: 1.6;
     }
     .trend-card {
         display: grid;
@@ -194,7 +218,14 @@
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
                     <label for="event_type">Tipo de movimiento</label>
-                    <input id="event_type" name="event_type" value="{{ $eventFilter }}" placeholder="Venta registrada, caja abierta, producto actualizado...">
+                    <select id="event_type" name="event_type">
+                        <option value="">Todos los movimientos</option>
+                        @foreach ($eventTypeOptions as $option)
+                            <option value="{{ $option->event_type }}" {{ $eventFilter === $option->event_type ? 'selected' : '' }}>
+                                {{ $option->display_label }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
                 <div class="row-actions" style="grid-column: 1 / -1;">
                     <button class="button-secondary" type="submit">Aplicar filtros</button>
@@ -271,15 +302,15 @@
                             <p>{{ $event->detail_label }}</p>
                         </div>
 
-                        <div class="timeline-note">
+                        <div class="timeline-note {{ $event->apply_error ? 'danger' : ($event->applied_at ? 'success' : 'pending') }}">
                             @if ($event->apply_error)
-                                <strong style="display:block; margin-bottom: 4px;">Que necesita tu atencion</strong>
+                                <strong>Que necesita tu atencion</strong>
                                 <p>{{ \Illuminate\Support\Str::limit($event->apply_error, 180) }}</p>
                             @elseif ($event->applied_at)
-                                <strong style="display:block; margin-bottom: 4px;">Resultado</strong>
+                                <strong>Resultado</strong>
                                 <p>Este movimiento ya quedo reflejado en la nube el {{ \Carbon\Carbon::parse($event->applied_at)->format('M j, Y · g:i A') }}.</p>
                             @else
-                                <strong style="display:block; margin-bottom: 4px;">Estado</strong>
+                                <strong>Estado</strong>
                                 <p>La nube ya lo recibio y sigue en espera de aplicarlo por completo.</p>
                             @endif
                         </div>

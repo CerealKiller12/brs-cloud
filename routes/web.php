@@ -964,6 +964,20 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
                 return $row;
             });
 
+        $eventTypeOptions = DB::table('sync_events')
+            ->where('tenant_id', $user->tenant_id)
+            ->when($storeFilter, fn ($query) => $query->where('store_id', $storeFilter))
+            ->when($deviceFilter !== '', fn ($query) => $query->where('device_id', $deviceFilter))
+            ->select('event_type')
+            ->distinct()
+            ->orderBy('event_type')
+            ->get()
+            ->map(function ($row) use ($humanizeEventType) {
+                $row->display_label = $humanizeEventType($row->event_type);
+
+                return $row;
+            });
+
         $events = (clone $baseQuery)
             ->latest('received_at')
             ->paginate(20)
@@ -1006,7 +1020,7 @@ Route::middleware('auth')->group(function () use ($resolveStoreForUser, $bumpCat
             })
         );
 
-        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes'));
+        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'eventTypeOptions', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes'));
     })->name('sync.index');
 
     Route::get('/catalog', function (Request $request) use ($resolveStoreForUser) {

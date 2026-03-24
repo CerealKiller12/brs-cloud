@@ -80,6 +80,26 @@ Catálogo compartido por tienda con versión.
 
 Eventos locales que se suben cuando hay conexión.
 
+## Nomenclatura
+
+En `brs-cloud` los contratos internos siguen usando `tenant` y `store`.
+
+Eso aplica a:
+
+- nombres de campos como `tenantName`, `storeName`, `storeCode`
+- endpoints administrativos
+- payloads de bootstrap y sync
+
+Pero en el POS la interfaz visible ya muestra:
+
+- `Negocio` en lugar de `Tenant`
+- `Sucursal` en lugar de `Store`
+
+La regla practica es:
+
+- internals y API: `tenant/store`
+- copy visible para operacion: `negocio/sucursal`
+
 ## Endpoints base
 
 ### Health
@@ -232,10 +252,45 @@ php artisan migrate:fresh --seed
 php artisan serve
 ```
 
+## Deploy manual en Cloudways
+
+Despues de `git pull`, el flujo manual recomendado para este repo es:
+
+```bash
+cd /Users/marcelcelaya/Documents/BRS-workspace/brs-cloud
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan optimize:clear
+php artisan route:clear
+php artisan view:clear
+php artisan config:clear
+php artisan cache:clear
+php artisan config:cache
+php artisan view:cache
+```
+
+Si quieres dejar rutas cacheadas tambien:
+
+```bash
+php artisan route:cache
+```
+
+Si hay workers/colas corriendo en produccion:
+
+```bash
+php artisan queue:restart
+```
+
+Notas:
+
+- `migrate --force` debe correr en deploy productivo
+- `optimize:clear` ya limpia caches previos; los `clear` de abajo se mantienen porque asi ha quedado tu rutina manual de deploy
+- el POS ya consume copy visible `Negocio/Sucursal`, pero los contratos del backend siguen siendo `tenant/store`
+
 ## Siguiente paso recomendado
 
 1. `Laravel Cashier + Stripe`
 2. versionado formal de catálogo
 3. jobs de sync
-4. panel admin cloud por tenant/store/device
+4. panel admin cloud multi-sucursal por tenant/store/device
 5. auditoría y métricas de sincronización
