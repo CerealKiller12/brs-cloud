@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? 'BRS Cloud' }}</title>
+    <title>{{ $title ?? 'Venpi Cloud' }}</title>
     <style>
         :root {
             color-scheme: light;
@@ -461,7 +461,7 @@
         <aside class="sidebar">
             <div class="brand">
                 <small>Tu operacion en la nube</small>
-                <strong>{{ auth()->user()->tenant?->name ?? 'BRS Cloud' }}</strong>
+                <strong>{{ auth()->user()->tenant?->name ?? 'Venpi Cloud' }}</strong>
             </div>
 
             @if (!empty($cloudActiveStore) && !empty($cloudAvailableStores))

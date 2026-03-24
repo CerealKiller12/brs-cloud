@@ -207,13 +207,13 @@ $resolveStoreContext = function (Request $request) {
 
     if (!$store || $store->api_key !== $storeKey) {
         abort(response()->json([
-            'message' => 'No pude autenticar la tienda en BRS Cloud.',
+            'message' => 'No pude autenticar la tienda en Venpi Cloud.',
         ], 403));
     }
 
     if (!(bool) $store->store_is_active || !(bool) $store->tenant_is_active) {
         abort(response()->json([
-            'message' => 'La tienda o el tenant estan inactivos en BRS Cloud.',
+            'message' => 'La tienda o el tenant estan inactivos en Venpi Cloud.',
         ], 403));
     }
 
@@ -267,7 +267,7 @@ Route::post('/auth/login', function (Request $request) {
 
     if (!$user || !$user->is_active || !Hash::check($payload['password'], $user->password)) {
         return response()->json([
-            'message' => 'Credenciales invalidas para BRS Cloud.',
+            'message' => 'Credenciales invalidas para Venpi Cloud.',
         ], 422);
     }
 
@@ -440,13 +440,13 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/device-token', function (R
 
     if (!$store) {
         return response()->json([
-            'message' => 'No encontre esa store dentro de tu tenant en BRS Cloud.',
+            'message' => 'No encontre esa store dentro de tu tenant en Venpi Cloud.',
         ], 404);
     }
 
     if (!(bool) $store->store_is_active || !(bool) $store->tenant_is_active) {
         return response()->json([
-            'message' => 'La store o el tenant estan inactivos en BRS Cloud.',
+            'message' => 'La store o el tenant estan inactivos en Venpi Cloud.',
         ], 403);
     }
 
@@ -769,7 +769,7 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
             $currentCatalogVersion = (int) DB::table('stores')->where('id', $store->store_row_id)->value('catalog_version');
 
             if (in_array($eventType, $catalogMutationEventTypes, true) && $baseCatalogVersion !== null && $baseCatalogVersion !== $startingCatalogVersion) {
-                $message = "La caja intento editar catalogo sobre v{$baseCatalogVersion}, pero BRS Cloud ya va en v{$currentCatalogVersion}.";
+                $message = "La caja intento editar catalogo sobre v{$baseCatalogVersion}, pero Venpi Cloud ya va en v{$currentCatalogVersion}.";
 
                 DB::table('sync_events')
                     ->where('store_id', $store->store_row_id)

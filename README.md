@@ -1,6 +1,6 @@
-# BRS Cloud
+# Venpi Cloud
 
-Backend SaaS de `BRS POS`.
+Backend SaaS de `Venpi POS`.
 
 Este repo es independiente de:
 
@@ -17,7 +17,7 @@ Aqui vive:
 - auth cloud con Sanctum
 - base para suscripciones SaaS
 - portal cloud del cliente
-- consola interna de administracion BRS
+- consola interna de administracion Venpi
 
 ## Arquitectura
 
@@ -42,7 +42,7 @@ Negocio SaaS y consolidación:
 - entitlements
 - suscripciones
 - portal cloud para cliente
-- admin console interna para BRS
+- admin console interna para Venpi
 
 ### `brs-release`
 
@@ -102,7 +102,7 @@ La regla practica es:
 - internals y API: `tenant/store`
 - copy visible para operacion: `negocio/sucursal`
 
-## Consola interna BRS
+## Consola interna Venpi
 
 `brs-cloud` ahora tiene dos superficies distintas dentro del mismo Laravel:
 
@@ -286,7 +286,7 @@ Authorization: Bearer <device-token>
 
 El seeder crea:
 
-- tenant demo: `Baja Retail System Demo`
+- tenant demo: `Venpi Demo`
 - store demo: `MATRIZ-001`
 - api key demo: `brs_demo_store_key_001`
 - catálogo demo inicial
@@ -352,10 +352,10 @@ Comportamiento:
 
 Configuracion recomendada en Google:
 
-- Cliente OAuth 1: `BRS Cloud Web`
+- Cliente OAuth 1: `Venpi Cloud Web`
   - origin: `https://venpi.mx`
   - redirect: `https://venpi.mx/auth/google/callback`
-- Cliente OAuth 2: `BRS Admin Web`
+- Cliente OAuth 2: `Venpi Admin Web`
   - origin: `https://admin.venpi.mx`
   - redirect: `https://admin.venpi.mx/auth/google/callback`
 

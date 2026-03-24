@@ -1,9 +1,9 @@
-@extends('layouts.admin', ['title' => 'Clientes | BRS Admin'])
+@extends('layouts.admin', ['title' => 'Clientes | Venpi Admin'])
 
 @section('content')
 <section class="hero">
     <small>Clientes</small>
-    <h2>Negocios dados de alta en BRS Cloud</h2>
+    <h2>Negocios dados de alta en Venpi Cloud</h2>
     <p>Consulta tenants, responsables, plan, salud operativa y abre la ficha de cada cliente para administrarlo.</p>
 </section>
 

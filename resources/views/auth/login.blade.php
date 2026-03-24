@@ -1,10 +1,10 @@
-@extends('layouts.app', ['title' => 'Acceso | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Acceso | Venpi Cloud'])
 
 @section('content')
 <div class="login-wrap">
     <div class="login-card">
         <small class="eyebrow">Acceso</small>
-        <h1>Entra a BRS Cloud</h1>
+        <h1>Entra a Venpi Cloud</h1>
         <p>Administra sucursales, cajas y catalogo compartido desde un solo lugar.</p>
 
         <div style="display: grid; gap: 12px; margin-top: 24px; margin-bottom: 26px;">

@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'Subscripciones | BRS Admin'])
+@extends('layouts.admin', ['title' => 'Subscripciones | Venpi Admin'])
 
 @section('content')
 <section class="hero">

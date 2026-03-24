@@ -301,7 +301,7 @@ Route::middleware('guest')->group(function () {
         if (!Auth::attempt(array_merge($credentials, ['is_active' => true]), $request->boolean('remember'))) {
             return back()
                 ->withInput($request->only('email'))
-                ->withErrors(['email' => 'Credenciales invalidas para BRS Cloud.']);
+                ->withErrors(['email' => 'Credenciales invalidas para Venpi Cloud.']);
         }
 
         $request->session()->regenerate();

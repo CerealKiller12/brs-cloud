@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Sucursales | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Sucursales | Venpi Cloud'])
 
 @push('head')
 <style>

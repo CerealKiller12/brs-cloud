@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => $tenant->name.' | BRS Admin'])
+@extends('layouts.admin', ['title' => $tenant->name.' | Venpi Admin'])
 
 @section('content')
 <section class="hero">

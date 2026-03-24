@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Configuracion inicial | BRS Cloud'])
+@extends('layouts.app', ['title' => 'Configuracion inicial | Venpi Cloud'])
 
 @push('head')
 <style>
@@ -154,7 +154,7 @@
             <input id="owner_name" name="owner_name" value="{{ old('owner_name', $user->name) }}" required>
         </div>
         <div class="row-actions" style="grid-column: 1 / -1; justify-content: flex-end;">
-            <button class="button" type="submit">Entrar a BRS Cloud</button>
+            <button class="button" type="submit">Entrar a Venpi Cloud</button>
         </div>
     </form>
 </section>

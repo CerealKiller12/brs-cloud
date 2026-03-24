@@ -118,7 +118,7 @@ class SocialAuthController extends Controller
                 cookie()->queue(cookie()->forget('brs_social_return_to'));
 
                 return $this->redirectBackToApp($returnTo, [
-                    'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de BRS Cloud.',
+                    'cloud_error' => $exception->getMessage() ?: 'No pude vincular la cuenta social de Venpi Cloud.',
                 ]);
             }
 

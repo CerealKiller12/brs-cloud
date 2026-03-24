@@ -12,7 +12,7 @@ class EnsurePlatformAdmin
     {
         $user = $request->user();
 
-        abort_unless($user && $user->is_platform_admin, 403, 'Este espacio solo esta disponible para administracion interna de BRS.');
+        abort_unless($user && $user->is_platform_admin, 403, 'Este espacio solo esta disponible para administracion interna de Venpi.');
 
         return $next($request);
     }

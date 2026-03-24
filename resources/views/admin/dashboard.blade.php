@@ -1,10 +1,10 @@
-@extends('layouts.admin', ['title' => 'Admin Console | BRS'])
+@extends('layouts.admin', ['title' => 'Admin Console | Venpi'])
 
 @section('content')
 <section class="hero">
     <small>Administracion interna</small>
     <h2>Control general de clientes y subscripciones</h2>
-    <p>Desde aqui administras los negocios de BRS Cloud sin mezclar esa operacion con el portal que ve cada cliente.</p>
+    <p>Desde aqui administras los negocios de Venpi Cloud sin mezclar esa operacion con el portal que ve cada cliente.</p>
 </section>
 
 <section class="metrics-grid">

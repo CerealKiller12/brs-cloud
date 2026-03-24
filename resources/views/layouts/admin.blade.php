@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? 'BRS Admin' }}</title>
+    <title>{{ $title ?? 'Venpi Admin' }}</title>
     <style>
         :root {
             color-scheme: light;
@@ -389,7 +389,7 @@
     <div class="shell">
         <aside class="sidebar">
             <div class="brand">
-                <small>BRS Platform</small>
+                <small>Venpi Platform</small>
                 <strong>Admin Console</strong>
             </div>
 

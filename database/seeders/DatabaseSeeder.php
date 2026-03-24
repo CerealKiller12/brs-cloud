@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
         DB::table('tenants')->updateOrInsert(
             ['slug' => 'baja-retail-system-demo'],
             [
-                'name' => 'Baja Retail System Demo',
+                'name' => 'Venpi Demo',
                 'plan_code' => 'growth',
                 'subscription_status' => 'active',
                 'is_active' => true,
@@ -71,7 +71,7 @@ class DatabaseSeeder extends Seeder
                 'catalog_version' => 3,
                 'is_active' => true,
                 'branding_json' => json_encode([
-                    'business_name' => 'Baja Retail System',
+                    'business_name' => 'Venpi',
                     'terminal_name' => 'Caja principal',
                 ]),
                 'role_access_json' => json_encode($defaultRoleAccess),
