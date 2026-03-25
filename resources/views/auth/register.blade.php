@@ -20,6 +20,7 @@
         box-shadow: 0 24px 40px rgba(93, 63, 37, 0.08);
         backdrop-filter: blur(12px);
         color: #231910;
+        font-family: 'IBM Plex Sans', 'Aptos', 'Segoe UI', sans-serif;
     }
     .register-intro {
         display: grid;
@@ -38,6 +39,7 @@
         font-size: 2.4rem;
         line-height: 1.04;
         color: #231910;
+        font-weight: 600;
     }
     .register-intro p {
         margin: 0;
@@ -117,7 +119,7 @@
     }
     .register-link-row a {
         color: #231910;
-        font-weight: 600;
+        font-weight: 500;
         text-decoration: none;
     }
     .register-link-row a:hover {

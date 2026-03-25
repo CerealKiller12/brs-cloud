@@ -20,6 +20,7 @@
         box-shadow: 0 24px 40px rgba(93, 63, 37, 0.08);
         backdrop-filter: blur(12px);
         color: #231910;
+        font-family: 'IBM Plex Sans', 'Aptos', 'Segoe UI', sans-serif;
     }
     .auth-intro {
         display: grid;
@@ -38,6 +39,7 @@
         font-size: 2.4rem;
         line-height: 1.04;
         color: #231910;
+        font-weight: 600;
     }
     .auth-intro p {
         margin: 0;
@@ -83,7 +85,7 @@
         width: 100%;
         min-height: 3.25rem;
         border-radius: 16px;
-        font-weight: 600;
+        font-weight: 500;
         border: 0;
         background: #231910;
         color: #ffffff;
@@ -168,7 +170,7 @@
     }
     .account-link-row a {
         color: #231910;
-        font-weight: 600;
+        font-weight: 500;
         text-decoration: none;
     }
     .account-link-row a:hover {
