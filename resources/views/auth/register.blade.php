@@ -2,9 +2,14 @@
 
 @push('head')
 <style>
+    .register-intro {
+        display: grid;
+        gap: 10px;
+        max-width: 500px;
+    }
     .register-social-stack {
         display: grid;
-        gap: 14px;
+        gap: 0.8rem;
         max-width: 500px;
         margin-top: 26px;
     }
@@ -64,13 +69,30 @@
     .register-social-button__label {
         white-space: nowrap;
     }
+    .register-social-hint,
+    .register-link-row {
+        max-width: 500px;
+        font-size: 14px;
+        color: var(--muted);
+    }
+    .register-link-row {
+        margin-top: 22px;
+    }
+    .register-link-row a {
+        color: var(--text);
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .register-link-row a:hover {
+        text-decoration: underline;
+    }
 </style>
 @endpush
 
 @section('content')
 <div class="login-wrap">
     <div class="login-card" style="width: min(640px, 100%); padding: 38px 40px;">
-        <div style="display: grid; gap: 10px; max-width: 500px;">
+        <div class="register-intro">
             <small class="eyebrow">Venpi</small>
             <h1 style="margin-bottom: 0;">Crea tu cuenta</h1>
             <p>Empieza con tu negocio, tu primera sucursal y el acceso inicial para comenzar a operar en Venpi.</p>
@@ -96,6 +118,7 @@
                 </span>
                 <span class="register-social-button__label">Crear con Apple</span>
             </a>
+            <p class="register-social-hint">Tambien puedes crear tu acceso con la misma cuenta de Apple o Google que usaras en Venpi.</p>
         </div>
 
         <div class="surface" style="max-width: 500px; margin-top: 26px;">
@@ -105,8 +128,8 @@
             <p>3. Te dejamos como responsable inicial para administrar catalogo, cajas y sincronizacion.</p>
         </div>
 
-        <div class="row-actions" style="justify-content: space-between; max-width: 500px; margin-top: 24px;">
-            <a class="pill" href="{{ route('login') }}">Ya tengo cuenta</a>
+        <div class="register-link-row">
+            ¿Ya tienes cuenta? <a href="{{ route('login') }}">Inicia sesion</a>
         </div>
 
         @if ($errors->any())

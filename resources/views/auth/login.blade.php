@@ -23,9 +23,10 @@
         font-weight: 700;
     }
     .account-link-row {
-        display: flex;
-        justify-content: flex-start;
-        margin-top: 10px;
+        max-width: 500px;
+        margin-top: 6px;
+        font-size: 14px;
+        color: var(--muted);
     }
     .social-stack {
         display: grid;
@@ -98,6 +99,14 @@
         font-size: 14px;
         color: var(--muted);
     }
+    .account-link-row a {
+        color: var(--text);
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .account-link-row a:hover {
+        text-decoration: underline;
+    }
 </style>
 @endpush
 
@@ -149,8 +158,8 @@
             <p class="social-hint">Tambien puedes entrar con la misma cuenta de Apple o Google que usas en Venpi.</p>
         </div>
 
-        <div class="account-link-row" style="max-width: 500px;">
-            <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
+        <div class="account-link-row">
+            ¿Todavia no tienes cuenta? <a href="{{ route('register') }}">Crear cuenta</a>
         </div>
 
         @if ($errors->any())
