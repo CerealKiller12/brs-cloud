@@ -11,35 +11,50 @@
         border-top: 1px solid var(--line);
     }
     .social-divider {
-        font-size: 13px;
+        font-size: 0.92rem;
         color: var(--muted);
+        text-align: center;
     }
     .social-button {
         width: 100%;
-        min-height: 54px;
+        min-height: 3.25rem;
+        padding-inline: 1.1rem 1.3rem;
         border-radius: 16px;
         font-weight: 600;
+        letter-spacing: 0.01em;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.8rem;
         text-decoration: none;
+        transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            border-color 0.18s ease,
+            background 0.18s ease;
     }
     .social-button.google {
         background: #ffffff;
         color: #1f1f1f;
-        border: 1px solid #d9dfe5;
+        border: 1px solid rgba(60, 64, 67, 0.18);
+        box-shadow: 0 10px 24px rgba(60, 64, 67, 0.08);
     }
     .social-button.google:hover {
-        background: #f7f9fb;
+        transform: translateY(-1px);
+        background: #f8fbff;
+        border-color: rgba(66, 133, 244, 0.34);
+        box-shadow: 0 12px 26px rgba(66, 133, 244, 0.12);
     }
     .social-button.apple {
         background: #111111;
         color: #ffffff;
         border: 1px solid #111111;
+        box-shadow: 0 12px 26px rgba(17, 17, 17, 0.18);
     }
     .social-button.apple:hover {
         background: #000000;
+        border-color: #000000;
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
     }
     .social-button__icon {
         display: inline-grid;
@@ -85,7 +100,7 @@
         </form>
 
         <div class="social-stack">
-            <p class="social-divider">O si prefieres, continua con tu cuenta de Google o Apple.</p>
+            <p class="social-divider">o inicia sesion con</p>
             <a class="button-secondary social-button google" href="{{ route('social.redirect', 'google') }}">
                 <span class="social-button__icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" focusable="false">
@@ -105,7 +120,7 @@
                 </span>
                 <span class="social-button__label">Continuar con Apple</span>
             </a>
-            <p class="muted" style="font-size: 14px;">Si todavia no existe tu cuenta, la creamos automaticamente la primera vez que entres con Google o Apple.</p>
+            <p class="muted" style="font-size: 14px;">Tambien puedes entrar con la misma cuenta de Apple o Google que usas en Venpi.</p>
         </div>
 
         @if ($errors->any())

@@ -10,30 +10,44 @@
     }
     .register-social-button {
         width: 100%;
-        min-height: 54px;
+        min-height: 3.25rem;
+        padding-inline: 1.1rem 1.3rem;
         border-radius: 16px;
         font-weight: 600;
+        letter-spacing: 0.01em;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.8rem;
         text-decoration: none;
+        transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            border-color 0.18s ease,
+            background 0.18s ease;
     }
     .register-social-button.google {
         background: #ffffff;
         color: #1f1f1f;
-        border: 1px solid #d9dfe5;
+        border: 1px solid rgba(60, 64, 67, 0.18);
+        box-shadow: 0 10px 24px rgba(60, 64, 67, 0.08);
     }
     .register-social-button.google:hover {
-        background: #f7f9fb;
+        transform: translateY(-1px);
+        background: #f8fbff;
+        border-color: rgba(66, 133, 244, 0.34);
+        box-shadow: 0 12px 26px rgba(66, 133, 244, 0.12);
     }
     .register-social-button.apple {
         background: #111111;
         color: #ffffff;
         border: 1px solid #111111;
+        box-shadow: 0 12px 26px rgba(17, 17, 17, 0.18);
     }
     .register-social-button.apple:hover {
         background: #000000;
+        border-color: #000000;
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
     }
     .register-social-button__icon {
         display: inline-grid;
