@@ -2,10 +2,47 @@
 
 @push('head')
 <style>
+    .login-wrap {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 24px;
+        background:
+            radial-gradient(circle at top center, rgba(230, 156, 74, 0.08), transparent 32%),
+            linear-gradient(180deg, #fffaf3 0%, #f6efe6 48%, #efe3d4 100%);
+    }
+    .login-card {
+        width: min(640px, 100%);
+        padding: 38px 40px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(122, 87, 57, 0.10);
+        box-shadow: 0 24px 40px rgba(93, 63, 37, 0.08);
+        backdrop-filter: blur(12px);
+        color: #231910;
+    }
     .register-intro {
         display: grid;
         gap: 10px;
         max-width: 500px;
+    }
+    .eyebrow {
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        color: #8a6343;
+    }
+    .register-intro h1 {
+        margin: 0;
+        font-size: 2.4rem;
+        line-height: 1.04;
+        color: #231910;
+    }
+    .register-intro p {
+        margin: 0;
+        color: #6f5846;
+        line-height: 1.5;
     }
     .register-social-stack {
         display: grid;
@@ -73,25 +110,55 @@
     .register-link-row {
         max-width: 500px;
         font-size: 14px;
-        color: var(--muted);
+        color: #6f5846;
     }
     .register-link-row {
         margin-top: 22px;
     }
     .register-link-row a {
-        color: var(--text);
+        color: #231910;
         font-weight: 600;
         text-decoration: none;
     }
     .register-link-row a:hover {
         text-decoration: underline;
     }
+    .surface {
+        max-width: 500px;
+        margin-top: 26px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: #f9f2eb;
+        border: 1px solid rgba(122, 87, 57, 0.10);
+    }
+    .surface h4 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        color: #231910;
+    }
+    .surface p {
+        margin: 0;
+        color: #6f5846;
+        line-height: 1.55;
+    }
+    .surface p + p {
+        margin-top: 6px;
+    }
+    .error {
+        max-width: 500px;
+        margin-top: 16px;
+        padding: 0.8rem 1rem;
+        border-radius: 16px;
+        background: #f9d7d0;
+        color: #7a2412;
+        border: 1px solid rgba(176, 60, 22, 0.18);
+    }
 </style>
 @endpush
 
 @section('content')
 <div class="login-wrap">
-    <div class="login-card" style="width: min(640px, 100%); padding: 38px 40px;">
+    <div class="login-card">
         <div class="register-intro">
             <small class="eyebrow">Venpi</small>
             <h1 style="margin-bottom: 0;">Crea tu cuenta</h1>
@@ -121,7 +188,7 @@
             <p class="register-social-hint">Tambien puedes crear tu acceso con la misma cuenta de Apple o Google que usaras en Venpi.</p>
         </div>
 
-        <div class="surface" style="max-width: 500px; margin-top: 26px;">
+        <div class="surface">
             <h4>Que pasa despues</h4>
             <p>1. Creamos tu cuenta de negocio.</p>
             <p>2. Creamos la sucursal <strong>Caja principal</strong>.</p>
@@ -133,7 +200,7 @@
         </div>
 
         @if ($errors->any())
-            <div class="error" style="max-width: 500px;">{{ $errors->first() }}</div>
+            <div class="error">{{ $errors->first() }}</div>
         @endif
     </div>
 </div>

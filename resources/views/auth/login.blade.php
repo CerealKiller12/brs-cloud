@@ -2,14 +2,77 @@
 
 @push('head')
 <style>
+    .login-wrap {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 24px;
+        background:
+            radial-gradient(circle at top center, rgba(230, 156, 74, 0.08), transparent 32%),
+            linear-gradient(180deg, #fffaf3 0%, #f6efe6 48%, #efe3d4 100%);
+    }
+    .login-card {
+        width: min(640px, 100%);
+        padding: 38px 40px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(122, 87, 57, 0.10);
+        box-shadow: 0 24px 40px rgba(93, 63, 37, 0.08);
+        backdrop-filter: blur(12px);
+        color: #231910;
+    }
     .auth-intro {
         display: grid;
         gap: 10px;
         max-width: 500px;
     }
+    .eyebrow {
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        color: #8a6343;
+    }
+    .auth-intro h1 {
+        margin: 0;
+        font-size: 2.4rem;
+        line-height: 1.04;
+        color: #231910;
+    }
+    .auth-intro p {
+        margin: 0;
+        color: #6f5846;
+        line-height: 1.5;
+    }
     .auth-form {
         max-width: 500px;
         margin-top: 28px;
+    }
+    .auth-form .field {
+        display: grid;
+        gap: 0.45rem;
+        margin-bottom: 1rem;
+    }
+    .auth-form .field span {
+        color: #6f5846;
+        font-size: 0.98rem;
+        font-weight: 400;
+    }
+    .auth-form input {
+        width: 100%;
+        min-height: 3.25rem;
+        padding: 0.85rem 1rem;
+        border-radius: 14px;
+        border: 1px solid rgba(35, 25, 16, 0.12);
+        background: #fffdfb;
+        color: #231910;
+        font: inherit;
+        box-shadow: none;
+    }
+    .auth-form input:focus {
+        outline: none;
+        border-color: rgba(194, 135, 51, 0.42);
+        box-shadow: 0 0 0 4px rgba(230, 156, 74, 0.10);
     }
     .auth-actions {
         display: grid;
@@ -21,12 +84,16 @@
         min-height: 3.25rem;
         border-radius: 16px;
         font-weight: 700;
+        border: 0;
+        background: #231910;
+        color: #ffffff;
+        cursor: pointer;
     }
     .account-link-row {
         max-width: 500px;
         margin-top: 6px;
         font-size: 14px;
-        color: var(--muted);
+        color: #6f5846;
     }
     .social-stack {
         display: grid;
@@ -36,7 +103,7 @@
     }
     .social-divider {
         font-size: 0.92rem;
-        color: var(--muted);
+        color: #6f5846;
         text-align: center;
     }
     .social-button {
@@ -97,22 +164,31 @@
     }
     .social-hint {
         font-size: 14px;
-        color: var(--muted);
+        color: #6f5846;
     }
     .account-link-row a {
-        color: var(--text);
+        color: #231910;
         font-weight: 600;
         text-decoration: none;
     }
     .account-link-row a:hover {
         text-decoration: underline;
     }
+    .error {
+        max-width: 500px;
+        margin-top: 16px;
+        padding: 0.8rem 1rem;
+        border-radius: 16px;
+        background: #f9d7d0;
+        color: #7a2412;
+        border: 1px solid rgba(176, 60, 22, 0.18);
+    }
 </style>
 @endpush
 
 @section('content')
 <div class="login-wrap">
-    <div class="login-card" style="width: min(640px, 100%); padding: 38px 40px;">
+    <div class="login-card">
         <div class="auth-intro">
             <small class="eyebrow">Venpi</small>
             <h1 style="margin-bottom: 0;">Inicia sesion</h1>
@@ -121,14 +197,14 @@
 
         <form method="POST" action="{{ route('login.submit') }}" class="auth-form">
             @csrf
-            <div class="field">
-                <label for="email">Correo</label>
+            <label class="field">
+                <span>Correo</span>
                 <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus>
-            </div>
-            <div class="field">
-                <label for="password">Contrasena</label>
+            </label>
+            <label class="field">
+                <span>Contrasena</span>
                 <input id="password" name="password" type="password" required>
-            </div>
+            </label>
             <div class="auth-actions">
                 <button class="button auth-primary" type="submit">Iniciar sesion</button>
             </div>
@@ -163,7 +239,7 @@
         </div>
 
         @if ($errors->any())
-            <div class="error" style="max-width: 500px; margin-top: 16px;">{{ $errors->first() }}</div>
+            <div class="error">{{ $errors->first() }}</div>
         @endif
     </div>
 </div>
