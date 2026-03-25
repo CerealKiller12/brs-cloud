@@ -2,6 +2,32 @@
 
 @push('head')
 <style>
+    .auth-intro {
+        display: grid;
+        gap: 10px;
+        max-width: 500px;
+    }
+    .auth-form {
+        max-width: 500px;
+        margin-top: 28px;
+        border-top: 1px solid var(--line);
+        padding-top: 26px;
+    }
+    .auth-actions {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+    }
+    .auth-primary {
+        width: 100%;
+        min-height: 3.25rem;
+        border-radius: 16px;
+        font-weight: 700;
+    }
+    .account-link-row {
+        display: flex;
+        justify-content: flex-start;
+    }
     .social-stack {
         display: grid;
         gap: 14px;
@@ -77,13 +103,13 @@
 @section('content')
 <div class="login-wrap">
     <div class="login-card" style="width: min(640px, 100%); padding: 38px 40px;">
-        <div style="display: grid; gap: 10px; max-width: 500px;">
+        <div class="auth-intro">
             <small class="eyebrow">Venpi</small>
             <h1 style="margin-bottom: 0;">Inicia sesion</h1>
             <p>Entra con tu cuenta para conectar tus sucursales, cajas y catalogo en un solo lugar.</p>
         </div>
 
-        <form method="POST" action="{{ route('login.submit') }}" style="max-width: 500px; margin-top: 28px; border-top: 1px solid var(--line); padding-top: 26px;">
+        <form method="POST" action="{{ route('login.submit') }}" class="auth-form">
             @csrf
             <div class="field">
                 <label for="email">Correo</label>
@@ -93,9 +119,11 @@
                 <label for="password">Contrasena</label>
                 <input id="password" name="password" type="password" required>
             </div>
-            <div class="row-actions" style="justify-content: space-between; margin-top: 22px;">
-                <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
-                <button class="button" type="submit">Entrar</button>
+            <div class="auth-actions">
+                <button class="button auth-primary" type="submit">Iniciar sesion</button>
+                <div class="account-link-row">
+                    <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
+                </div>
             </div>
         </form>
 
@@ -124,7 +152,7 @@
         </div>
 
         @if ($errors->any())
-            <div class="error" style="max-width: 500px;">{{ $errors->first() }}</div>
+            <div class="error" style="max-width: 500px; margin-top: 16px;">{{ $errors->first() }}</div>
         @endif
     </div>
 </div>
