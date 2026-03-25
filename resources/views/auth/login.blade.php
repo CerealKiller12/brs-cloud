@@ -83,7 +83,7 @@
         width: 100%;
         min-height: 3.25rem;
         border-radius: 16px;
-        font-weight: 700;
+        font-weight: 600;
         border: 0;
         background: #231910;
         color: #ffffff;
@@ -111,7 +111,7 @@
         min-height: 3.25rem;
         padding-inline: 1.1rem 1.3rem;
         border-radius: 16px;
-        font-weight: 600;
+        font-weight: 500;
         letter-spacing: 0.01em;
         display: inline-flex;
         align-items: center;

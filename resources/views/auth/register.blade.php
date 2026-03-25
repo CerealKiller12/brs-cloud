@@ -55,7 +55,7 @@
         min-height: 3.25rem;
         padding-inline: 1.1rem 1.3rem;
         border-radius: 16px;
-        font-weight: 600;
+        font-weight: 500;
         letter-spacing: 0.01em;
         display: inline-flex;
         align-items: center;
