@@ -10,12 +10,10 @@
     .auth-form {
         max-width: 500px;
         margin-top: 28px;
-        border-top: 1px solid var(--line);
-        padding-top: 26px;
     }
     .auth-actions {
         display: grid;
-        gap: 14px;
+        gap: 18px;
         margin-top: 22px;
     }
     .auth-primary {
@@ -27,14 +25,13 @@
     .account-link-row {
         display: flex;
         justify-content: flex-start;
+        margin-top: 10px;
     }
     .social-stack {
         display: grid;
-        gap: 14px;
+        gap: 0.8rem;
         max-width: 500px;
         margin-top: 28px;
-        padding-top: 24px;
-        border-top: 1px solid var(--line);
     }
     .social-divider {
         font-size: 0.92rem;
@@ -97,6 +94,10 @@
     .social-button__label {
         white-space: nowrap;
     }
+    .social-hint {
+        font-size: 14px;
+        color: var(--muted);
+    }
 </style>
 @endpush
 
@@ -106,7 +107,7 @@
         <div class="auth-intro">
             <small class="eyebrow">Venpi</small>
             <h1 style="margin-bottom: 0;">Inicia sesion</h1>
-            <p>Entra con tu cuenta para conectar tus sucursales, cajas y catalogo en un solo lugar.</p>
+            <p>Entra con tu cuenta para administrar sucursales, cajas y catalogo desde un solo lugar.</p>
         </div>
 
         <form method="POST" action="{{ route('login.submit') }}" class="auth-form">
@@ -121,9 +122,6 @@
             </div>
             <div class="auth-actions">
                 <button class="button auth-primary" type="submit">Iniciar sesion</button>
-                <div class="account-link-row">
-                    <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
-                </div>
             </div>
         </form>
 
@@ -148,7 +146,11 @@
                 </span>
                 <span class="social-button__label">Continuar con Apple</span>
             </a>
-            <p class="muted" style="font-size: 14px;">Tambien puedes entrar con la misma cuenta de Apple o Google que usas en Venpi.</p>
+            <p class="social-hint">Tambien puedes entrar con la misma cuenta de Apple o Google que usas en Venpi.</p>
+        </div>
+
+        <div class="account-link-row" style="max-width: 500px;">
+            <a class="pill" href="{{ route('register') }}">Crear cuenta</a>
         </div>
 
         @if ($errors->any())
