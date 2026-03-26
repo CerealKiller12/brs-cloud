@@ -381,6 +381,7 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
             $saleItems = collect($sale->items)->map(function ($item) {
                 return [
                     'sku' => trim((string) ($item['productSku'] ?? '')),
+                    'name' => trim((string) ($item['productName'] ?? $item['name'] ?? '')),
                     'quantity' => (int) ($item['quantity'] ?? 0),
                     'amountCents' => (int) ($item['totalCents'] ?? (($item['unitPriceCents'] ?? 0) * ((int) ($item['quantity'] ?? 0)))),
                 ];
@@ -398,6 +399,7 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
 
                     return [
                         'sku' => $item['sku'],
+                        'name' => $item['name'],
                         'quantity' => $quantity,
                         'amountCents' => $amount,
                     ];
@@ -410,10 +412,14 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
         ->groupBy(fn ($item) => mb_strtolower($item['sku']))
         ->map(function ($rows, string $skuKey) use ($catalogProducts) {
             $sku = (string) ($rows->first()['sku'] ?? $skuKey);
+            $fallbackName = collect($rows)
+                ->pluck('name')
+                ->map(fn ($name) => trim((string) $name))
+                ->first(fn ($name) => $name !== '');
 
             return [
                 'sku' => $sku,
-                'name' => $catalogProducts[$skuKey] ?? $sku,
+                'name' => $catalogProducts[$skuKey] ?? $fallbackName ?? $sku,
                 'quantity' => (int) $rows->sum('quantity'),
                 'tickets' => (int) $rows->count(),
                 'amountCents' => (int) $rows->sum('amountCents'),

@@ -804,6 +804,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 return collect($sale->items)->map(function ($item) {
                     return [
                         'sku' => trim((string) ($item['productSku'] ?? '')),
+                        'name' => trim((string) ($item['productName'] ?? $item['name'] ?? '')),
                         'quantity' => (int) ($item['quantity'] ?? 0),
                     ];
                 });
@@ -812,10 +813,14 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->groupBy(fn ($item) => mb_strtolower($item['sku']))
             ->map(function ($rows, string $skuKey) use ($catalogProducts) {
                 $sku = (string) ($rows->first()['sku'] ?? $skuKey);
+                $fallbackName = collect($rows)
+                    ->pluck('name')
+                    ->map(fn ($name) => trim((string) $name))
+                    ->first(fn ($name) => $name !== '');
 
                 return (object) [
                     'sku' => $sku,
-                    'name' => $catalogProducts[$skuKey] ?? $sku,
+                    'name' => $catalogProducts[$skuKey] ?? $fallbackName ?? $sku,
                     'quantity' => (int) $rows->sum('quantity'),
                     'tickets' => (int) $rows->count(),
                 ];
