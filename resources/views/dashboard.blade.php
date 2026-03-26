@@ -95,6 +95,14 @@
         border: 1px solid var(--line);
         background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246,250,253,.98) 100%);
     }
+    .dash-hero > *,
+    .dash-hero-side > *,
+    .dash-grid-2 > *,
+    .dash-grid-3 > *,
+    .kpi-grid > *,
+    .mini-metrics > * {
+        min-width: 0;
+    }
     .kpi-card .stat-value {
         font-size: 34px;
         margin-bottom: 4px;
@@ -102,16 +110,23 @@
     .chart-card {
         display: grid;
         gap: 18px;
+        min-width: 0;
     }
     .chart-wrap {
         position: relative;
         min-height: 300px;
+        min-width: 0;
+        overflow: hidden;
     }
     .chart-wrap.small {
         min-height: 250px;
     }
     .chart-wrap.compact {
         min-height: 220px;
+    }
+    .chart-wrap canvas {
+        display: block;
+        max-width: 100%;
     }
     .mini-metrics {
         display: grid;
