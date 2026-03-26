@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Venpi Cloud | Punto de venta sincronizado</title>
+    <title>Venpi | Punto de venta sincronizado</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=fraunces:600,700|ibm-plex-sans:400,500,600,700" rel="stylesheet" />
     <style>
@@ -60,16 +60,14 @@
             letter-spacing: 0.02em;
         }
         .brand-mark {
-            width: 44px;
-            height: 44px;
-            border-radius: 16px;
-            display: grid;
-            place-items: center;
-            color: #fff8ef;
-            background: linear-gradient(160deg, #8a6343 0%, #c58a53 100%);
-            box-shadow: 0 18px 30px rgba(138, 99, 67, 0.22);
-            font-family: "Fraunces", Georgia, serif;
-            font-size: 1.15rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .brand-mark img {
+            width: 168px;
+            height: auto;
+            display: block;
         }
         .brand-copy {
             display: grid;
@@ -338,6 +336,100 @@
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 18px;
         }
+        .downloads-band {
+            display: grid;
+            grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+            gap: 18px;
+            margin-top: 10px;
+        }
+        .downloads-copy,
+        .downloads-grid {
+            padding: 28px;
+            border-radius: 30px;
+            border: 1px solid var(--line);
+            background: var(--panel);
+            box-shadow: 0 16px 40px rgba(95, 61, 36, 0.08);
+        }
+        .downloads-copy h3,
+        .downloads-grid h3 {
+            margin: 0 0 10px;
+            font-size: 1.6rem;
+        }
+        .downloads-copy p,
+        .downloads-grid p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+        .downloads-list {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .download-card {
+            padding: 18px;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(95, 61, 36, 0.08);
+            display: grid;
+            gap: 12px;
+        }
+        .download-card__head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .download-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 16px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(138, 99, 67, 0.12), rgba(220, 181, 143, 0.34));
+            color: var(--accent-strong);
+        }
+        .download-icon svg {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
+        .download-card strong {
+            display: block;
+            font-size: 1rem;
+        }
+        .download-card span {
+            display: block;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 0.94rem;
+        }
+        .download-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .download-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            padding: 0 12px;
+            border-radius: 999px;
+            background: rgba(255, 247, 236, 0.92);
+            border: 1px solid rgba(138, 99, 67, 0.12);
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .download-link {
+            color: var(--accent-strong);
+            font-weight: 600;
+            font-size: 0.94rem;
+        }
         .feature-card {
             padding: 24px;
             border-radius: 28px;
@@ -488,6 +580,7 @@
         @media (max-width: 1080px) {
             .hero,
             .split-band,
+            .downloads-band,
             .cta-band {
                 grid-template-columns: 1fr;
             }
@@ -525,6 +618,7 @@
             .hero-points,
             .snapshot-stats,
             .flow-row,
+            .downloads-list,
             .feature-grid {
                 grid-template-columns: 1fr;
             }
@@ -542,10 +636,12 @@
     <div class="page-shell">
         <header class="topbar">
             <a class="brand" href="{{ url('/') }}">
-                <span class="brand-mark">V</span>
+                <span class="brand-mark">
+                    <img src="{{ asset('images/venpi-logo.png') }}" alt="Venpi">
+                </span>
                 <span class="brand-copy">
-                    <strong>Venpi Cloud</strong>
-                    <span>Punto de venta offline-first para operar y crecer</span>
+                    <strong>Venpi</strong>
+                    <span>Punto de venta sincronizado para operar y crecer</span>
                 </span>
             </a>
             <div class="topbar-actions">
@@ -557,17 +653,17 @@
 
         <section class="hero">
             <div class="hero-copy">
-                <span class="eyebrow">Offline-first · iPad · Web local · Nube</span>
+                <span class="eyebrow">Offline-first · Web local · iOS · Android</span>
                 <h1>Vende rapido. Sincroniza claro. Opera sin drama.</h1>
-                <p>Venpi junta cobro, inventario, cajas, sucursales y nube en una sola operacion. Cobra desde iPad o web local, trabaja aunque el internet falle y sincroniza catalogo, stock y ventas cuando la red vuelve.</p>
+                <p>Venpi junta cobro, inventario, cajas, sucursales y nube en una sola operacion. Cobra desde una caja local, una tableta o la web, trabaja aunque el internet falle y sincroniza catalogo, stock y ventas cuando la red vuelve.</p>
                 <div class="hero-actions">
                     <a class="button" href="{{ route('register') }}">Crear cuenta</a>
-                    <a class="button-secondary" href="{{ route('login') }}">Entrar a Venpi Cloud</a>
+                    <a class="button-secondary" href="{{ route('login') }}">Entrar a Venpi</a>
                 </div>
                 <div class="hero-points">
                     <article class="hero-point">
                         <strong>Cobro pensado para caja real</strong>
-                        <span>Flujo agil en iPad, catalogo vivo, venta rapida y ticket listo para operar en mostrador.</span>
+                        <span>Flujo agil en tableta o web local, catalogo vivo, venta rapida y ticket listo para operar en mostrador.</span>
                     </article>
                     <article class="hero-point">
                         <strong>Catalogo compartido</strong>
@@ -607,7 +703,7 @@
                     <article class="activity-item">
                         <div>
                             <strong>Venta registrada</strong>
-                            <span>Caja iPad · Ticket M-IPAD-7021 · 3 articulos</span>
+                            <span>Caja principal · Ticket M-7021 · 3 articulos</span>
                         </div>
                         <em>Hace 2 min</em>
                     </article>
@@ -643,7 +739,7 @@
                 <article class="feature-card">
                     <div class="feature-kicker">01</div>
                     <strong>Cobro rapido y enfocado</strong>
-                    <p>Catalogo vivo en la seccion de cobro, flujo tactil para iPad, carrito agil y ticket listo para salir con menos friccion.</p>
+                    <p>Catalogo vivo en la seccion de cobro, flujo tactil para tableta, carrito agil y ticket listo para salir con menos friccion.</p>
                 </article>
                 <article class="feature-card">
                     <div class="feature-kicker">02</div>
@@ -668,7 +764,98 @@
                 <article class="feature-card">
                     <div class="feature-kicker">06</div>
                     <strong>Impresion por dispositivo</strong>
-                    <p>Cada caja puede trabajar con su propia salida local: iPad, impresora instalada o conexion dedicada segun el entorno.</p>
+                    <p>Cada caja puede trabajar con su propia salida local: tableta, impresora instalada o conexion dedicada segun el entorno.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" id="descargas">
+            <div class="downloads-band">
+                <article class="downloads-copy">
+                    <h3>Descargas para cada entorno</h3>
+                    <p>Prepara una misma operacion para distintos equipos. Por ahora son accesos de referencia, pero la seccion ya queda lista para publicar instaladores reales cuando los tengas.</p>
+                    <div class="story-grid">
+                        <div class="story-line">
+                            <div class="story-index">A</div>
+                            <div>
+                                <strong>Un mismo negocio, varias superficies</strong>
+                                <p class="micro-note">Windows, Mac, iOS y Android pueden vivir dentro de la misma historia operativa sin duplicar catalogos.</p>
+                            </div>
+                        </div>
+                        <div class="story-line">
+                            <div class="story-index">B</div>
+                            <div>
+                                <strong>Listo para crecer por etapas</strong>
+                                <p class="micro-note">Puedes abrir esta banda como escaparate ahora y convertirla luego en centro real de descargas por plataforma.</p>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+                <article class="downloads-grid">
+                    <h3>Plataformas disponibles</h3>
+                    <p>Accesos marcados como proximamente para dejar clara la disponibilidad por sistema.</p>
+                    <div class="downloads-list">
+                        <div class="download-card">
+                            <div class="download-card__head">
+                                <div class="download-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none"><path d="M3 5.5L10 4v7H3v-5.5Zm8 5.5V3.8l11-1.6V11H11Zm0 2h11v8.8L11 20.2V13ZM3 13h7v7L3 18.5V13Z" fill="currentColor"/></svg>
+                                </div>
+                                <div>
+                                    <strong>Windows</strong>
+                                    <span>Instalador de caja local y administracion de mostrador.</span>
+                                </div>
+                            </div>
+                            <div class="download-meta">
+                                <span class="download-pill">Proximamente</span>
+                                <span class="download-link">Avisarme</span>
+                            </div>
+                        </div>
+                        <div class="download-card">
+                            <div class="download-card__head">
+                                <div class="download-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none"><path d="M16.2 2.5c.9 1 1.4 2.2 1.5 3.6-1.3.1-2.6.7-3.4 1.7-.7.8-1.4 2-1.2 3.3 1.4.1 2.7-.6 3.5-1.6.8-1 1.2-2.2 1.2-3.4-.6-.1-1.1.1-1.6.4ZM12.8 7.8c1.5 0 2.8.9 3.6.9.7 0 2-.9 3.4-.8.7 0 2.6.3 3.9 2.2-2.8 1.6-2.3 5.6.6 6.8-.4 1.2-.9 2.3-1.7 3.3-1 1.3-2.1 2.7-3.8 2.7-1.6 0-2.1-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.8-1.3-3.8-2.6-2.1-2.8-3.6-8-.9-11 1.3-1.5 3-2.3 4.9-2.3Z" fill="currentColor"/></svg>
+                                </div>
+                                <div>
+                                    <strong>Mac</strong>
+                                    <span>Aplicacion de escritorio para cajas locales y periféricos.</span>
+                                </div>
+                            </div>
+                            <div class="download-meta">
+                                <span class="download-pill">Proximamente</span>
+                                <span class="download-link">Avisarme</span>
+                            </div>
+                        </div>
+                        <div class="download-card">
+                            <div class="download-card__head">
+                                <div class="download-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M10 5.5h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="18.2" r="1" fill="currentColor"/></svg>
+                                </div>
+                                <div>
+                                    <strong>iOS</strong>
+                                    <span>Experiencia tactil para operar caja, catalogo y tickets desde tableta.</span>
+                                </div>
+                            </div>
+                            <div class="download-meta">
+                                <span class="download-pill">Proximamente</span>
+                                <span class="download-link">Avisarme</span>
+                            </div>
+                        </div>
+                        <div class="download-card">
+                            <div class="download-card__head">
+                                <div class="download-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none"><path d="M7.2 3h9.6l2.2 3.8v10.4l-2.2 3.8H7.2L5 17.2V6.8L7.2 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 8.4v7.2M14.5 8.4v7.2M9.5 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                </div>
+                                <div>
+                                    <strong>Android</strong>
+                                    <span>Operacion movil para mostrador, apoyo en piso y consulta rapida.</span>
+                                </div>
+                            </div>
+                            <div class="download-meta">
+                                <span class="download-pill">Proximamente</span>
+                                <span class="download-link">Avisarme</span>
+                            </div>
+                        </div>
+                    </div>
                 </article>
             </div>
         </section>
@@ -709,7 +896,7 @@
                         <div class="checklist-item">
                             <i>✓</i>
                             <div>
-                                <strong>Una caja iPad y una web local pueden convivir</strong>
+                                <strong>Una caja tactil y una web local pueden convivir</strong>
                                 <span>Cada una con su propio contexto operativo, sin perder el inventario compartido.</span>
                             </div>
                         </div>
