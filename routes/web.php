@@ -42,6 +42,12 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
 
 $buildBusinessDashboardData = function (User $user, Request $request) {
     $editId = $request->integer('edit');
+    $tenantId = $user->tenant_id;
+    $now = now();
+    $todayStart = now()->copy()->startOfDay();
+    $yesterdayStart = $todayStart->copy()->subDay();
+    $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
+    $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
 
     $stores = Store::query()
         ->where('tenant_id', $user->tenant_id)
@@ -77,7 +83,281 @@ $buildBusinessDashboardData = function (User $user, Request $request) {
         ? Store::query()->where('tenant_id', $user->tenant_id)->where('id', $editId)->first()
         : null;
 
-    return compact('stores', 'editStore', 'deviceCounts', 'catalogCounts', 'storeStats');
+    $storeNames = $stores->pluck('name', 'id');
+    $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
+
+    $deviceMetaById = Device::query()
+        ->where('tenant_id', $tenantId)
+        ->get(['device_id', 'name', 'platform', 'store_id'])
+        ->keyBy('device_id');
+
+    $salesHistory = DB::table('sync_events')
+        ->select(['store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+        ->where('tenant_id', $tenantId)
+        ->where('event_type', 'sale.created')
+        ->where('received_at', '>=', $thirtyDaysAgo)
+        ->orderBy('received_at')
+        ->get()
+        ->map(function ($event) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+
+            try {
+                $occurredAt = !empty($payload['createdAt'])
+                    ? \Carbon\Carbon::parse($payload['createdAt'])
+                    : (!empty($event->occurred_at)
+                        ? \Carbon\Carbon::parse($event->occurred_at)
+                        : \Carbon\Carbon::parse($event->received_at));
+            } catch (\Throwable) {
+                $occurredAt = \Carbon\Carbon::parse($event->received_at);
+            }
+
+            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+
+            return (object) [
+                'store_id' => $event->store_id,
+                'device_id' => $event->device_id,
+                'folio' => trim((string) ($payload['folio'] ?? data_get($payload, 'sale.folio', ''))),
+                'occurred_at' => $occurredAt,
+                'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                'items' => is_array($items) ? $items : [],
+            ];
+        })
+        ->values();
+
+    $salesLast7Days = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
+        ->values();
+
+    $salesTodayCollection = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
+        ->values();
+
+    $salesYesterdayCollection = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
+        ->values();
+
+    $salesTodayAmountCents = (int) $salesTodayCollection->sum('total_cents');
+    $salesYesterdayAmountCents = (int) $salesYesterdayCollection->sum('total_cents');
+    $salesTodayCount = (int) $salesTodayCollection->count();
+    $salesLast7DaysCount = (int) $salesLast7Days->count();
+    $salesLast7DaysAmountCents = (int) $salesLast7Days->sum('total_cents');
+    $averageTicketTodayCents = $salesTodayCount > 0 ? (int) round($salesTodayAmountCents / $salesTodayCount) : 0;
+    $averageTicket7DaysCents = $salesLast7DaysCount > 0 ? (int) round($salesLast7DaysAmountCents / $salesLast7DaysCount) : 0;
+
+    $salesDeltaPercent = null;
+    if ($salesYesterdayAmountCents > 0) {
+        $salesDeltaPercent = (int) round((($salesTodayAmountCents - $salesYesterdayAmountCents) / $salesYesterdayAmountCents) * 100);
+    } elseif ($salesTodayAmountCents > 0) {
+        $salesDeltaPercent = 100;
+    }
+
+    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days) {
+        $day = now()->copy()->subDays($daysAgo);
+        $rows = $salesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
+
+        return [
+            'label' => $day->format('d/m'),
+            'tickets' => (int) $rows->count(),
+            'amountCents' => (int) $rows->sum('total_cents'),
+        ];
+    })->values();
+
+    $paymentLabels = [
+        'cash' => 'Efectivo',
+        'card' => 'Tarjeta',
+        'transfer' => 'Transferencia',
+        'mixed' => 'Mixto',
+    ];
+
+    $paymentMix = collect($paymentLabels)
+        ->map(function (string $label, string $key) use ($salesLast7Days) {
+            $rows = $salesLast7Days->filter(fn ($sale) => $sale->payment_method === $key);
+
+            return (object) [
+                'key' => $key,
+                'label' => $label,
+                'tickets' => (int) $rows->count(),
+                'amountCents' => (int) $rows->sum('total_cents'),
+            ];
+        })
+        ->filter(fn ($row) => $row->tickets > 0 || $row->amountCents > 0)
+        ->values();
+
+    $hourlySales = collect(range(0, 23))->map(function (int $hour) use ($salesTodayCollection) {
+        $rows = $salesTodayCollection->filter(fn ($sale) => (int) $sale->occurred_at->format('G') === $hour);
+
+        return [
+            'label' => str_pad((string) $hour, 2, '0', STR_PAD_LEFT).':00',
+            'tickets' => (int) $rows->count(),
+            'amountCents' => (int) $rows->sum('total_cents'),
+        ];
+    })->values();
+
+    $peakHour = collect($hourlySales)->sortByDesc('tickets')->first();
+
+    $catalogProducts = $storeIds->isEmpty()
+        ? collect()
+        : DB::table('cloud_catalog_products')
+            ->whereIn('store_id', $storeIds)
+            ->get(['sku', 'name'])
+            ->mapWithKeys(fn ($product) => [[mb_strtolower(trim((string) $product->sku)) => $product->name]]);
+
+    $topProducts = $salesLast7Days
+        ->flatMap(function ($sale) {
+            return collect($sale->items)->map(function ($item) {
+                return [
+                    'sku' => trim((string) ($item['productSku'] ?? '')),
+                    'name' => trim((string) ($item['productName'] ?? $item['name'] ?? '')),
+                    'quantity' => (int) ($item['quantity'] ?? 0),
+                ];
+            });
+        })
+        ->filter(fn ($item) => $item['sku'] !== '' && $item['quantity'] > 0)
+        ->groupBy(fn ($item) => mb_strtolower($item['sku']))
+        ->map(function ($rows, string $skuKey) use ($catalogProducts) {
+            $sku = (string) ($rows->first()['sku'] ?? $skuKey);
+            $fallbackName = collect($rows)
+                ->pluck('name')
+                ->map(fn ($name) => trim((string) $name))
+                ->first(fn ($name) => $name !== '');
+
+            return (object) [
+                'sku' => $sku,
+                'name' => $catalogProducts[$skuKey] ?? $fallbackName ?? $sku,
+                'quantity' => (int) $rows->sum('quantity'),
+                'tickets' => (int) $rows->count(),
+            ];
+        })
+        ->sortByDesc('quantity')
+        ->take(6)
+        ->values();
+
+    $storeSales = $salesLast7Days
+        ->groupBy('store_id')
+        ->map(function ($rows, int|string $storeId) use ($storeNames) {
+            $tickets = (int) $rows->count();
+            $amountCents = (int) $rows->sum('total_cents');
+
+            return (object) [
+                'store_id' => (int) $storeId,
+                'label' => $storeNames[(int) $storeId] ?? 'Sucursal',
+                'tickets' => $tickets,
+                'amountCents' => $amountCents,
+                'averageTicketCents' => $tickets > 0 ? (int) round($amountCents / $tickets) : 0,
+            ];
+        })
+        ->sortByDesc('amountCents')
+        ->take(5)
+        ->values();
+
+    $lowStockProducts = $storeIds->isEmpty()
+        ? collect()
+        : DB::table('cloud_catalog_products')
+            ->whereIn('store_id', $storeIds)
+            ->where('is_active', true)
+            ->where('track_inventory', true)
+            ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+            ->orderBy('stock_on_hand')
+            ->limit(5)
+            ->get(['store_id', 'name', 'sku', 'stock_on_hand', 'reorder_point'])
+            ->map(function ($product) use ($storeNames) {
+                $product->store_name = $storeNames[$product->store_id] ?? 'Sucursal';
+
+                return $product;
+            });
+
+    $recentEvents = DB::table('sync_events')
+        ->where('tenant_id', $tenantId)
+        ->latest('received_at')
+        ->limit(8)
+        ->get()
+        ->map(function ($event) use ($storeNames) {
+            $event->store_name = $storeNames[$event->store_id] ?? 'Sucursal';
+
+            return $event;
+        });
+
+    $stats = [
+        'stores' => $storeStats['total'],
+        'devices' => $storeStats['devices'],
+        'onlineDevices' => DB::table('devices')
+            ->where('tenant_id', $tenantId)
+            ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
+            ->count(),
+        'catalogItems' => $storeStats['catalogItems'],
+        'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->count(),
+        'conflicts' => DB::table('sync_events')
+            ->where('tenant_id', $tenantId)
+            ->whereNotNull('apply_error')
+            ->count(),
+        'lowStock' => $storeIds->isEmpty()
+            ? 0
+            : DB::table('cloud_catalog_products')
+                ->whereIn('store_id', $storeIds)
+                ->where('is_active', true)
+                ->where('track_inventory', true)
+                ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+                ->count(),
+        'salesToday' => $salesTodayCount,
+        'salesTodayAmountCents' => $salesTodayAmountCents,
+        'salesYesterdayAmountCents' => $salesYesterdayAmountCents,
+        'salesDeltaPercent' => $salesDeltaPercent,
+        'averageTicketTodayCents' => $averageTicketTodayCents,
+        'salesLast7Days' => $salesLast7DaysCount,
+        'salesLast7DaysAmountCents' => $salesLast7DaysAmountCents,
+        'averageTicket7DaysCents' => $averageTicket7DaysCents,
+    ];
+
+    $nextSteps = collect([
+        [
+            'done' => $storeStats['total'] > 0,
+            'title' => 'Ya tienes al menos una sucursal lista',
+            'detail' => 'Tu operacion ya puede repartirse por espacios distintos con cajas y catalogo propio.',
+            'cta' => route('dashboard'),
+            'ctaLabel' => 'Ver sucursales',
+        ],
+        [
+            'done' => $stats['onlineDevices'] > 0,
+            'title' => 'Conecta al menos una caja',
+            'detail' => 'Una caja conectada te permite operar ventas y sincronizar cambios en vivo.',
+            'cta' => route('devices.index'),
+            'ctaLabel' => 'Ver cajas',
+        ],
+        [
+            'done' => $stats['catalogItems'] > 0,
+            'title' => 'Carga tu catalogo compartido',
+            'detail' => 'Agrega tus productos base para que cada sucursal arranque con inventario usable.',
+            'cta' => route('catalog.index'),
+            'ctaLabel' => 'Abrir catalogo',
+        ],
+        [
+            'done' => $stats['salesToday'] > 0,
+            'title' => 'Haz tu primera venta del dia',
+            'detail' => 'En cuanto una caja cobre, aqui veras el pulso real del negocio completo.',
+            'cta' => route('sync.index'),
+            'ctaLabel' => 'Ver actividad',
+        ],
+    ]);
+
+    return compact(
+        'tenant',
+        'stores',
+        'editStore',
+        'deviceCounts',
+        'catalogCounts',
+        'storeStats',
+        'stats',
+        'salesTimeline',
+        'paymentMix',
+        'topProducts',
+        'storeSales',
+        'hourlySales',
+        'peakHour',
+        'lowStockProducts',
+        'recentEvents',
+        'nextSteps'
+    );
 };
 
 $cloudThemePresets = [

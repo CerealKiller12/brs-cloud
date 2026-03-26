@@ -637,6 +637,11 @@
                 <strong>{{ auth()->user()->tenant?->name ?? 'Venpi Cloud' }}</strong>
             </div>
 
+            <div class="nav-section">
+                <span>Tu operacion en la nube</span>
+                <a class="nav-link {{ request()->routeIs('dashboard', 'stores.index') ? 'active' : '' }}" href="{{ route('dashboard') }}">Inicio</a>
+            </div>
+
             @if (!empty($cloudActiveStore) && !empty($cloudAvailableStores))
                 <div class="store-context">
                     <div class="store-meta">
@@ -657,11 +662,6 @@
                     </form>
                 </div>
             @endif
-
-            <div class="nav-section">
-                <span>Tu operacion en la nube</span>
-                <a class="nav-link {{ request()->routeIs('dashboard', 'stores.index') ? 'active' : '' }}" href="{{ route('dashboard') }}">Inicio</a>
-            </div>
 
             <div class="nav-section">
                 <span>Sucursal activa</span>
