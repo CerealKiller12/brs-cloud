@@ -378,16 +378,33 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
 
     $topProducts = $salesLast7Days
         ->flatMap(function ($sale) {
-            return collect($sale->items)->map(function ($item) {
-                $quantity = (int) ($item['quantity'] ?? 0);
-                $amount = (int) ($item['totalCents'] ?? (($item['unitPriceCents'] ?? 0) * $quantity));
-
+            $saleItems = collect($sale->items)->map(function ($item) {
                 return [
                     'sku' => trim((string) ($item['productSku'] ?? '')),
-                    'quantity' => $quantity,
-                    'amountCents' => max(0, $amount),
+                    'quantity' => (int) ($item['quantity'] ?? 0),
+                    'amountCents' => (int) ($item['totalCents'] ?? (($item['unitPriceCents'] ?? 0) * ((int) ($item['quantity'] ?? 0)))),
                 ];
-            });
+            })->values();
+
+            $hasAmounts = $saleItems->contains(fn ($item) => $item['amountCents'] > 0);
+
+            if (!$hasAmounts && $saleItems->isNotEmpty()) {
+                $ticketTotal = max(0, (int) $sale->total_cents);
+                $totalQuantity = max(1, (int) $saleItems->sum('quantity'));
+
+                $saleItems = $saleItems->map(function ($item) use ($ticketTotal, $totalQuantity) {
+                    $quantity = max(0, (int) $item['quantity']);
+                    $amount = $quantity > 0 ? (int) round(($ticketTotal * $quantity) / $totalQuantity) : 0;
+
+                    return [
+                        'sku' => $item['sku'],
+                        'quantity' => $quantity,
+                        'amountCents' => $amount,
+                    ];
+                })->values();
+            }
+
+            return $saleItems;
         })
         ->filter(fn ($item) => $item['sku'] !== '' && $item['quantity'] > 0)
         ->groupBy(fn ($item) => mb_strtolower($item['sku']))
@@ -403,6 +420,7 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
             ];
         })
         ->sortByDesc('amountCents')
+        ->values()
         ->take(5)
         ->values();
 
