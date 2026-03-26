@@ -81,12 +81,20 @@
     .dash-grid-2 {
         grid-template-columns: 1.2fr .8fr;
     }
+    .dash-grid-split {
+        grid-template-columns: 1.1fr .9fr;
+    }
     .dash-grid-3 {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .kpi-grid {
         display: grid;
         grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .kpi-grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 16px;
     }
     .kpi-card {
@@ -228,13 +236,26 @@
     .section-title p {
         max-width: 60ch;
     }
+    .context-card {
+        padding: 22px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: var(--panel-soft);
+        display: grid;
+        gap: 14px;
+    }
+    .context-card .pill {
+        width: fit-content;
+    }
     .money-value {
         font-variant-numeric: tabular-nums;
     }
     @media (max-width: 1280px) {
         .dash-hero,
         .dash-grid-2,
+        .dash-grid-split,
         .kpi-grid,
+        .kpi-grid-4,
         .dash-grid-3,
         .mini-metrics {
             grid-template-columns: 1fr 1fr;
@@ -243,7 +264,9 @@
     @media (max-width: 820px) {
         .dash-hero,
         .dash-grid-2,
+        .dash-grid-split,
         .kpi-grid,
+        .kpi-grid-4,
         .dash-grid-3,
         .mini-metrics {
             grid-template-columns: 1fr;
@@ -272,18 +295,18 @@
 
 <section class="dash-hero">
     <article class="dash-hero-main">
-        <small class="eyebrow">Centro de operacion</small>
-        <h1>{{ $store->name }}</h1>
-        <p>{{ data_get(is_array($store->branding_json ?? null) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []), 'business_name', $tenant->name ?? 'Tu negocio') }}</p>
+        <small class="eyebrow">Negocio completo</small>
+        <h1>{{ $tenant->name ?? 'Tu negocio' }}</h1>
+        <p>Lee primero el pulso general del negocio y luego baja al detalle de la sucursal activa para operar con mas claridad.</p>
 
         <div class="hero-badges">
-            <span class="pill">Version {{ $store->catalog_version ?? 0 }}</span>
-            <span class="pill">{{ $stats['onlineDevices'] }} caja(s) activas</span>
-            <span class="pill">MX${{ number_format($stats['salesTodayAmountCents'] / 100, 2) }} hoy</span>
+            <span class="pill">{{ $businessStats['stores'] }} sucursal(es)</span>
+            <span class="pill">{{ $businessStats['onlineDevices'] }} caja(s) activas</span>
+            <span class="pill">MX${{ number_format($businessStats['salesTodayAmountCents'] / 100, 2) }} hoy</span>
         </div>
 
         <div class="dash-actions">
-            <a class="button" href="{{ route('catalog.index') }}">Abrir catalogo</a>
+            <a class="button" href="{{ route('stores.index') }}">Ver sucursales</a>
             <a class="button-secondary" href="{{ route('devices.index') }}">Ver cajas</a>
             <a class="button-secondary" href="{{ route('sync.index') }}">Revisar actividad</a>
         </div>
@@ -291,62 +314,82 @@
 
     <div class="dash-hero-side">
         <article class="card hero-mini">
-            <small class="eyebrow">Ingreso de hoy</small>
-            <div class="stat-value money-value">MX${{ number_format($stats['salesTodayAmountCents'] / 100, 2) }}</div>
-            <p>{{ $stats['salesToday'] }} ticket(s) registrados hoy en esta sucursal.</p>
+            <small class="eyebrow">Negocio hoy</small>
+            <div class="stat-value money-value">MX${{ number_format($businessStats['salesTodayAmountCents'] / 100, 2) }}</div>
+            <p>{{ $businessStats['salesToday'] }} ticket(s) registrados hoy entre todas tus sucursales.</p>
         </article>
         <article class="card hero-mini">
-            <small class="eyebrow">Comparativo rapido</small>
-            <div class="stat-value">
-                @if (!is_null($stats['salesDeltaPercent']))
-                    {{ $stats['salesDeltaPercent'] > 0 ? '+' : '' }}{{ $stats['salesDeltaPercent'] }}%
-                @else
-                    --
-                @endif
-            </div>
-            <p>
-                @if (!is_null($stats['salesDeltaPercent']))
-                    frente a ayer en ingreso vendido.
-                @elseif ($stats['salesTodayAmountCents'] > 0)
-                    Hoy ya hay ventas, pero ayer no hubo base para comparar.
-                @else
-                    Aun no hay ventas hoy para comparar contra ayer.
-                @endif
-            </p>
+            <small class="eyebrow">Sucursal activa</small>
+            <div class="stat-value">{{ $store->name }}</div>
+            <p>{{ $store->code }} · catalogo v{{ $store->catalog_version ?? 0 }} · {{ $stats['onlineDevices'] }} caja(s) activas.</p>
         </article>
     </div>
 </section>
 
-<section class="kpi-grid">
-    <article class="kpi-card">
-        <div class="stat-label">Ingreso hoy</div>
-        <div class="stat-value money-value">MX${{ number_format($stats['salesTodayAmountCents'] / 100, 2) }}</div>
-        <div class="stat-note">importe cobrado por tus cajas hoy</div>
+<section class="dash-grid dash-grid-split">
+    <article class="card">
+        <div class="section-title">
+            <div>
+                <small class="eyebrow">Resumen del negocio</small>
+                <h3>Metricas globales de todas tus sucursales</h3>
+            </div>
+            <p>Aqui todo se consolida por negocio completo para que no confundas el pulso general con la foto de una sola sucursal.</p>
+        </div>
+
+        <section class="kpi-grid-4">
+            <article class="kpi-card">
+                <div class="stat-label">Ingreso hoy</div>
+                <div class="stat-value money-value">MX${{ number_format($businessStats['salesTodayAmountCents'] / 100, 2) }}</div>
+                <div class="stat-note">importe vendido entre todas las sucursales</div>
+            </article>
+            <article class="kpi-card">
+                <div class="stat-label">Tickets hoy</div>
+                <div class="stat-value">{{ $businessStats['salesToday'] }}</div>
+                <div class="stat-note">ventas registradas en el negocio</div>
+            </article>
+            <article class="kpi-card">
+                <div class="stat-label">Ticket promedio</div>
+                <div class="stat-value money-value">MX${{ number_format($businessStats['averageTicketTodayCents'] / 100, 2) }}</div>
+                <div class="stat-note">promedio por ticket hoy</div>
+            </article>
+            <article class="kpi-card">
+                <div class="stat-label">Atencion requerida</div>
+                <div class="stat-value">{{ $businessStats['conflicts'] + $businessStats['lowStock'] }}</div>
+                <div class="stat-note">{{ $businessStats['conflicts'] }} incidencia(s) y {{ $businessStats['lowStock'] }} alerta(s) de stock</div>
+            </article>
+        </section>
     </article>
-    <article class="kpi-card">
-        <div class="stat-label">Tickets hoy</div>
-        <div class="stat-value">{{ $stats['salesToday'] }}</div>
-        <div class="stat-note">ventas registradas en esta sucursal</div>
-    </article>
-    <article class="kpi-card">
-        <div class="stat-label">Ticket promedio</div>
-        <div class="stat-value money-value">MX${{ number_format($stats['averageTicketTodayCents'] / 100, 2) }}</div>
-        <div class="stat-note">promedio de cobro por ticket hoy</div>
-    </article>
-    <article class="kpi-card">
-        <div class="stat-label">Ingreso 7 dias</div>
-        <div class="stat-value money-value">MX${{ number_format($stats['salesLast7DaysAmountCents'] / 100, 2) }}</div>
-        <div class="stat-note">{{ $stats['salesLast7Days'] }} ticket(s) en la ultima semana</div>
-    </article>
-    <article class="kpi-card">
-        <div class="stat-label">Cajas activas</div>
-        <div class="stat-value">{{ $stats['onlineDevices'] }}</div>
-        <div class="stat-note">reportando en los ultimos 10 minutos</div>
-    </article>
-    <article class="kpi-card">
-        <div class="stat-label">Atencion requerida</div>
-        <div class="stat-value">{{ $stats['conflicts'] + $stats['lowStock'] }}</div>
-        <div class="stat-note">{{ $stats['conflicts'] }} incidencia(s) y {{ $stats['lowStock'] }} producto(s) con stock bajo</div>
+
+    <article class="card">
+        <div class="section-title">
+            <div>
+                <small class="eyebrow">Sucursal activa</small>
+                <h3>{{ $store->name }}</h3>
+            </div>
+            <p>Este bloque si representa solo la sucursal seleccionada en el lateral.</p>
+        </div>
+
+        <div class="context-card">
+            <span class="pill">{{ $store->code }}</span>
+            <p>{{ data_get(is_array($store->branding_json ?? null) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []), 'business_name', $tenant->name ?? 'Tu negocio') }}</p>
+            <div class="mini-metrics">
+                <div class="mini-metric">
+                    <span class="stat-label">Ingreso hoy</span>
+                    <strong class="money-value">MX${{ number_format($stats['salesTodayAmountCents'] / 100, 2) }}</strong>
+                    <span class="muted">operacion de esta sucursal</span>
+                </div>
+                <div class="mini-metric">
+                    <span class="stat-label">Tickets hoy</span>
+                    <strong>{{ $stats['salesToday'] }}</strong>
+                    <span class="muted">ventas registradas hoy</span>
+                </div>
+                <div class="mini-metric">
+                    <span class="stat-label">Cajas activas</span>
+                    <strong>{{ $stats['onlineDevices'] }}</strong>
+                    <span class="muted">reportando en 10 minutos</span>
+                </div>
+            </div>
+        </div>
     </article>
 </section>
 
@@ -354,10 +397,50 @@
     <article class="card chart-card">
         <div class="section-title">
             <div>
-                <small class="eyebrow">Ventas de la semana</small>
+                <small class="eyebrow">Negocio</small>
+                <h3>Ingreso y tickets entre todas las sucursales</h3>
+            </div>
+            <p>Te ayuda a leer el ritmo completo del negocio antes de bajar al detalle operativo de una sola sucursal.</p>
+        </div>
+
+        <div class="chart-wrap">
+            <canvas id="tenantSalesTimelineChart"></canvas>
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="section-title">
+            <div>
+                <small class="eyebrow">Sucursales</small>
+                <h3>Quienes estan cargando mas venta</h3>
+            </div>
+            <a class="pill" href="{{ route('stores.index') }}">Ver sucursales</a>
+        </div>
+
+        <div class="rank-list">
+            @forelse ($storeSales as $saleStore)
+                <div class="rank-row">
+                    <div>
+                        <strong>{{ $saleStore->label }}</strong>
+                        <p>{{ $saleStore->code ? $saleStore->code.' · ' : '' }}{{ $saleStore->tickets }} ticket(s) · promedio MX${{ number_format($saleStore->averageTicketCents / 100, 2) }}</p>
+                    </div>
+                    <span class="metric-chip money">MX${{ number_format($saleStore->amountCents / 100, 2) }}</span>
+                </div>
+            @empty
+                <div class="empty">Todavia no hay ventas suficientes para comparar sucursales.</div>
+            @endforelse
+        </div>
+    </article>
+</section>
+
+<section class="dash-grid dash-grid-2">
+    <article class="card chart-card">
+        <div class="section-title">
+            <div>
+                <small class="eyebrow">Sucursal activa</small>
                 <h3>Ingreso y tickets en los ultimos 7 dias</h3>
             </div>
-            <p>Te muestra si la sucursal esta vendiendo mas, si hay dias flojos y si el ritmo de tickets acompana al ingreso que entra.</p>
+            <p>Este bloque si corresponde solo a la sucursal activa, para que su propia tendencia no se mezcle con la del negocio completo.</p>
         </div>
 
         <div class="chart-wrap">
@@ -368,12 +451,12 @@
             <div class="mini-metric">
                 <span class="stat-label">Ingreso semanal</span>
                 <strong class="money-value">MX${{ number_format($stats['salesLast7DaysAmountCents'] / 100, 2) }}</strong>
-                <span class="muted">dinero cobrado en los ultimos 7 dias</span>
+                <span class="muted">dinero cobrado en esta sucursal</span>
             </div>
             <div class="mini-metric">
                 <span class="stat-label">Promedio semanal</span>
                 <strong class="money-value">MX${{ number_format($stats['averageTicket7DaysCents'] / 100, 2) }}</strong>
-                <span class="muted">ticket promedio de la ultima semana</span>
+                <span class="muted">ticket promedio de esta sucursal</span>
             </div>
             <div class="mini-metric">
                 <span class="stat-label">Comparativo</span>
@@ -582,9 +665,79 @@
         maximumFractionDigits: 0,
     });
 
+    const tenantSalesTimeline = @json($tenantSalesTimeline);
     const salesTimeline = @json($salesTimeline);
     const paymentMix = @json($paymentMix->map(fn ($row) => ['label' => $row->label, 'tickets' => (int) $row->tickets, 'amountCents' => (int) $row->amountCents])->values());
     const hourlySales = @json($hourlySales);
+
+    const tenantSalesTimelineCanvas = document.getElementById('tenantSalesTimelineChart');
+    if (tenantSalesTimelineCanvas) {
+        new Chart(tenantSalesTimelineCanvas, {
+            type: 'bar',
+            data: {
+                labels: tenantSalesTimeline.map((point) => point.label),
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Ingreso total',
+                        data: tenantSalesTimeline.map((point) => Math.round(point.amountCents / 100)),
+                        backgroundColor: '#d4b48d',
+                        borderRadius: 12,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'line',
+                        label: 'Tickets totales',
+                        data: tenantSalesTimeline.map((point) => point.tickets),
+                        borderColor: '#231910',
+                        backgroundColor: 'rgba(35, 25, 16, .12)',
+                        borderWidth: 3,
+                        tension: .35,
+                        fill: false,
+                        pointBackgroundColor: '#231910',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        yAxisID: 'y1',
+                    }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 10,
+                            color: '#486175',
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#6a7a8f' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(216, 224, 232, .65)' },
+                        ticks: {
+                            color: '#6a7a8f',
+                            callback: (value) => money.format(Number(value)),
+                        }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        grid: { display: false },
+                        ticks: { color: '#6a7a8f', precision: 0 }
+                    }
+                }
+            }
+        });
+    }
 
     const salesTimelineCanvas = document.getElementById('salesTimelineChart');
     if (salesTimelineCanvas) {

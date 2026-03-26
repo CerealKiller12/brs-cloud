@@ -951,12 +951,50 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
 
         $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
+        $storesById = Store::query()
+            ->where('tenant_id', $tenantId)
+            ->get(['id', 'name', 'code'])
+            ->keyBy('id');
 
         $deviceMetaById = Device::query()
             ->where('tenant_id', $tenantId)
             ->where('store_id', $storeId)
             ->get(['device_id', 'name', 'platform'])
             ->keyBy('device_id');
+
+        $tenantSalesHistory = DB::table('sync_events')
+            ->select(['store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+            ->where('tenant_id', $tenantId)
+            ->where('event_type', 'sale.created')
+            ->where('received_at', '>=', $thirtyDaysAgo)
+            ->orderBy('received_at')
+            ->get()
+            ->map(function ($event) {
+                $payload = json_decode($event->payload_json, true) ?: [];
+
+                try {
+                    $occurredAt = !empty($payload['createdAt'])
+                        ? \Carbon\Carbon::parse($payload['createdAt'])
+                        : (!empty($event->occurred_at)
+                            ? \Carbon\Carbon::parse($event->occurred_at)
+                            : \Carbon\Carbon::parse($event->received_at));
+                } catch (\Throwable) {
+                    $occurredAt = \Carbon\Carbon::parse($event->received_at);
+                }
+
+                $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+
+                return (object) [
+                    'store_id' => (int) $event->store_id,
+                    'device_id' => $event->device_id,
+                    'folio' => trim((string) ($payload['folio'] ?? data_get($payload, 'sale.folio', ''))),
+                    'occurred_at' => $occurredAt,
+                    'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                    'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                    'items' => is_array($items) ? $items : [],
+                ];
+            })
+            ->values();
 
         $salesHistory = DB::table('sync_events')
             ->select(['device_id', 'payload_json', 'occurred_at', 'received_at'])
@@ -991,6 +1029,43 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 ];
             })
             ->values();
+
+        $tenantSalesLast7Days = $tenantSalesHistory
+            ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
+            ->values();
+
+        $tenantSalesTodayCollection = $tenantSalesHistory
+            ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
+            ->values();
+
+        $tenantSalesYesterdayCollection = $tenantSalesHistory
+            ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
+            ->values();
+
+        $tenantSalesTodayAmountCents = (int) $tenantSalesTodayCollection->sum('total_cents');
+        $tenantSalesYesterdayAmountCents = (int) $tenantSalesYesterdayCollection->sum('total_cents');
+        $tenantSalesTodayCount = (int) $tenantSalesTodayCollection->count();
+        $tenantSalesLast7DaysCount = (int) $tenantSalesLast7Days->count();
+        $tenantSalesLast7DaysAmountCents = (int) $tenantSalesLast7Days->sum('total_cents');
+        $tenantAverageTicketTodayCents = $tenantSalesTodayCount > 0 ? (int) round($tenantSalesTodayAmountCents / $tenantSalesTodayCount) : 0;
+
+        $tenantSalesDeltaPercent = null;
+        if ($tenantSalesYesterdayAmountCents > 0) {
+            $tenantSalesDeltaPercent = (int) round((($tenantSalesTodayAmountCents - $tenantSalesYesterdayAmountCents) / $tenantSalesYesterdayAmountCents) * 100);
+        } elseif ($tenantSalesTodayAmountCents > 0) {
+            $tenantSalesDeltaPercent = 100;
+        }
+
+        $tenantSalesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($tenantSalesLast7Days) {
+            $day = now()->copy()->subDays($daysAgo);
+            $rows = $tenantSalesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
+
+            return [
+                'label' => $day->format('d/m'),
+                'tickets' => (int) $rows->count(),
+                'amountCents' => (int) $rows->sum('total_cents'),
+            ];
+        })->values();
 
         $salesLast7Days = $salesHistory
             ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
@@ -1040,6 +1115,20 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $paymentMix = collect($paymentLabels)
             ->map(function (string $label, string $key) use ($salesLast7Days) {
                 $rows = $salesLast7Days->filter(fn ($sale) => $sale->payment_method === $key);
+
+                return (object) [
+                    'key' => $key,
+                    'label' => $label,
+                    'tickets' => (int) $rows->count(),
+                    'amountCents' => (int) $rows->sum('total_cents'),
+                ];
+            })
+            ->filter(fn ($row) => $row->tickets > 0 || $row->amountCents > 0)
+            ->values();
+
+        $tenantPaymentMix = collect($paymentLabels)
+            ->map(function (string $label, string $key) use ($tenantSalesLast7Days) {
+                $rows = $tenantSalesLast7Days->filter(fn ($sale) => $sale->payment_method === $key);
 
                 return (object) [
                     'key' => $key,
@@ -1117,6 +1206,26 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->take(5)
             ->values();
 
+        $storeSales = $tenantSalesLast7Days
+            ->groupBy('store_id')
+            ->map(function ($rows, int $saleStoreId) use ($storesById) {
+                $storeMeta = $storesById->get($saleStoreId);
+                $tickets = (int) $rows->count();
+                $amountCents = (int) $rows->sum('total_cents');
+
+                return (object) [
+                    'store_id' => $saleStoreId,
+                    'label' => $storeMeta?->name ?? 'Sucursal',
+                    'code' => $storeMeta?->code ?? null,
+                    'tickets' => $tickets,
+                    'amountCents' => $amountCents,
+                    'averageTicketCents' => $tickets > 0 ? (int) round($amountCents / $tickets) : 0,
+                ];
+            })
+            ->sortByDesc('amountCents')
+            ->take(6)
+            ->values();
+
         $stats = [
             'stores' => DB::table('stores')->where('tenant_id', $tenantId)->count(),
             'devices' => DB::table('devices')->where('tenant_id', $tenantId)->count(),
@@ -1146,6 +1255,35 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'salesLast7Days' => $salesLast7DaysCount,
             'salesLast7DaysAmountCents' => $salesLast7DaysAmountCents,
             'averageTicket7DaysCents' => $averageTicket7DaysCents,
+        ];
+
+        $businessStats = [
+            'stores' => DB::table('stores')->where('tenant_id', $tenantId)->count(),
+            'devices' => DB::table('devices')->where('tenant_id', $tenantId)->count(),
+            'onlineDevices' => DB::table('devices')
+                ->where('tenant_id', $tenantId)
+                ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
+                ->count(),
+            'catalogItems' => DB::table('cloud_catalog_products')
+                ->whereIn('store_id', $storesById->keys())
+                ->count(),
+            'conflicts' => DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->whereNotNull('apply_error')
+                ->count(),
+            'lowStock' => DB::table('cloud_catalog_products')
+                ->whereIn('store_id', $storesById->keys())
+                ->where('is_active', true)
+                ->where('track_inventory', true)
+                ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+                ->count(),
+            'salesToday' => $tenantSalesTodayCount,
+            'salesTodayAmountCents' => $tenantSalesTodayAmountCents,
+            'salesYesterdayAmountCents' => $tenantSalesYesterdayAmountCents,
+            'salesDeltaPercent' => $tenantSalesDeltaPercent,
+            'averageTicketTodayCents' => $tenantAverageTicketTodayCents,
+            'salesLast7Days' => $tenantSalesLast7DaysCount,
+            'salesLast7DaysAmountCents' => $tenantSalesLast7DaysAmountCents,
         ];
 
         $recentEvents = DB::table('sync_events')
@@ -1216,11 +1354,15 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'user',
             'tenant',
             'store',
+            'businessStats',
             'stats',
             'recentEvents',
+            'tenantSalesTimeline',
             'salesTimeline',
+            'tenantPaymentMix',
             'paymentMix',
             'topProducts',
+            'storeSales',
             'deviceSales',
             'hourlySales',
             'peakHour',
