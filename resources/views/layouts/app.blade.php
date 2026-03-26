@@ -100,6 +100,10 @@
             grid-template-columns: 260px minmax(0, 1fr);
             min-height: 100vh;
         }
+        .mobile-topbar,
+        .sidebar-overlay {
+            display: none;
+        }
         .sidebar {
             background: var(--sidebar-bg);
             color: var(--sidebar-text);
@@ -512,7 +516,81 @@
         }
         @media (max-width: 820px) {
             .shell { grid-template-columns: 1fr; }
-            .sidebar { padding-bottom: 12px; }
+            .mobile-topbar {
+                position: sticky;
+                top: 0;
+                z-index: 40;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 14px;
+                padding: 14px 16px;
+                background: rgba(255,255,255,.86);
+                border-bottom: 1px solid var(--line);
+                backdrop-filter: blur(14px);
+            }
+            .mobile-topbar__title {
+                display: grid;
+                gap: 2px;
+            }
+            .mobile-topbar__title strong {
+                font-size: 18px;
+                line-height: 1.1;
+            }
+            .mobile-topbar__title span {
+                font-size: 12px;
+                color: var(--muted);
+            }
+            .mobile-menu-button {
+                width: 46px;
+                height: 46px;
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                background: var(--panel);
+                color: var(--text);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex: none;
+            }
+            .mobile-menu-button svg {
+                width: 20px;
+                height: 20px;
+                display: block;
+            }
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 45;
+                background: rgba(16, 12, 9, .42);
+            }
+            body.sidebar-open {
+                overflow: hidden;
+            }
+            body.sidebar-open .sidebar-overlay {
+                display: block;
+            }
+            .sidebar {
+                padding-bottom: 12px;
+                position: fixed;
+                inset: 0 auto 0 0;
+                z-index: 50;
+                width: min(320px, calc(100vw - 36px));
+                max-width: 100%;
+                min-height: 100dvh;
+                height: 100dvh;
+                overflow-y: auto;
+                box-shadow: 0 30px 50px rgba(16, 12, 9, .24);
+                transform: translateX(-110%);
+                transition: transform .22s ease;
+            }
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+            .content {
+                padding: 18px 16px 24px;
+            }
             .metrics-grid,
             .grid-4,
             .grid-3,
@@ -552,6 +630,7 @@
     ">
 @auth
     <div class="shell">
+        <div class="sidebar-overlay" data-sidebar-close></div>
         <aside class="sidebar">
             <div class="brand">
                 <small>Tu operacion en la nube</small>
@@ -595,6 +674,17 @@
             </form>
         </aside>
         <main class="content">
+            <div class="mobile-topbar">
+                <button class="mobile-menu-button" type="button" data-sidebar-toggle aria-label="Abrir menu">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <div class="mobile-topbar__title">
+                    <strong>{{ $cloudActiveStore->name ?? (auth()->user()->tenant?->name ?? 'Venpi Cloud') }}</strong>
+                    <span>{{ $cloudActiveStore->code ?? 'Operacion' }}</span>
+                </div>
+            </div>
             @yield('content')
         </main>
     </div>
@@ -605,6 +695,23 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const navLinks = Array.from(document.querySelectorAll('.sidebar .nav-link'));
+        const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+        const sidebarCloseTargets = Array.from(document.querySelectorAll('[data-sidebar-close]'));
+        const closeSidebar = () => document.body.classList.remove('sidebar-open');
+        const openSidebar = () => document.body.classList.add('sidebar-open');
+
+        sidebarToggle?.addEventListener('click', () => {
+            if (document.body.classList.contains('sidebar-open')) {
+                closeSidebar();
+                return;
+            }
+
+            openSidebar();
+        });
+
+        sidebarCloseTargets.forEach((target) => {
+            target.addEventListener('click', closeSidebar);
+        });
 
         navLinks.forEach((link) => {
             link.addEventListener('click', (event) => {
@@ -620,12 +727,14 @@
                 document.body.classList.add('nav-transitioning');
                 navLinks.forEach((item) => item.classList.remove('is-pending'));
                 link.classList.add('is-pending');
+                closeSidebar();
             });
         });
 
         window.addEventListener('pageshow', () => {
             document.body.classList.remove('nav-transitioning');
             navLinks.forEach((item) => item.classList.remove('is-pending'));
+            closeSidebar();
         });
     });
 </script>
