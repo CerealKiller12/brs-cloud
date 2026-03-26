@@ -503,14 +503,17 @@ $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $in
 };
 
 Route::get('/', function () {
+    $isAdminHostRequest = ($adminHost = trim((string) config('app.admin_host', ''))) !== ''
+        && strcasecmp(request()->getHost(), $adminHost) === 0;
+
     if (!Auth::check()) {
-        return redirect()->route('login');
+        return $isAdminHostRequest
+            ? redirect()->route('login')
+            : view('landing');
     }
 
     /** @var User|null $user */
     $user = Auth::user();
-    $isAdminHostRequest = ($adminHost = trim((string) config('app.admin_host', ''))) !== ''
-        && strcasecmp(request()->getHost(), $adminHost) === 0;
 
     return $user?->is_platform_admin && $isAdminHostRequest
         ? redirect()->route('admin.dashboard')
