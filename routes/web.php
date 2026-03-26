@@ -40,7 +40,129 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
     return $activeStore;
 };
 
-View::composer('layouts.app', function ($view) use ($buildStoreContext) {
+$cloudThemePresets = [
+    'ocean' => [
+        'label' => 'Costa',
+        'description' => 'Azules suaves y un contraste limpio para operar todo el dia.',
+        'accent' => '#1f3244',
+        'sidebar' => '#162330',
+        'panel' => '#f8fbfd',
+        'vars' => [
+            'bg' => '#f3f6f9',
+            'bg_soft' => '#eef4f9',
+            'bg_strong' => '#e9f0f6',
+            'panel' => 'rgba(255,255,255,.94)',
+            'panel_soft' => '#f8fbfd',
+            'muted' => '#6a7a8f',
+            'text' => '#213043',
+            'accent' => '#1f3244',
+            'accent_soft' => '#31506b',
+            'line' => '#d8e0e8',
+            'soft' => '#edf3f8',
+            'sidebar_bg' => 'linear-gradient(180deg, #162330 0%, #1e3142 100%)',
+            'sidebar_text' => '#eef4f8',
+            'sidebar_muted' => '#b7c8d7',
+            'sidebar_panel' => 'rgba(255,255,255,.06)',
+            'nav_idle' => 'rgba(255,255,255,.04)',
+            'nav_hover' => 'rgba(255,255,255,.08)',
+            'nav_active' => '#29475f',
+            'sidebar_button' => 'rgba(255,255,255,.1)',
+        ],
+    ],
+    'forest' => [
+        'label' => 'Bosque',
+        'description' => 'Verdes profundos con una base suave y sobria para operacion continua.',
+        'accent' => '#244532',
+        'sidebar' => '#182a21',
+        'panel' => '#f4faf5',
+        'vars' => [
+            'bg' => '#f3f7f2',
+            'bg_soft' => '#eef5ee',
+            'bg_strong' => '#e5efe6',
+            'panel' => 'rgba(255,255,255,.95)',
+            'panel_soft' => '#f3f8f3',
+            'muted' => '#667d70',
+            'text' => '#213128',
+            'accent' => '#244532',
+            'accent_soft' => '#3d6750',
+            'line' => '#d4e1d8',
+            'soft' => '#e9f2eb',
+            'sidebar_bg' => 'linear-gradient(180deg, #182a21 0%, #22392d 100%)',
+            'sidebar_text' => '#eef7ef',
+            'sidebar_muted' => '#bfd5c5',
+            'sidebar_panel' => 'rgba(255,255,255,.06)',
+            'nav_idle' => 'rgba(255,255,255,.04)',
+            'nav_hover' => 'rgba(255,255,255,.08)',
+            'nav_active' => '#315541',
+            'sidebar_button' => 'rgba(255,255,255,.1)',
+        ],
+    ],
+    'sunset' => [
+        'label' => 'Atardecer',
+        'description' => 'Arena clara con acentos terracota para un tono mas calido.',
+        'accent' => '#6a3f2d',
+        'sidebar' => '#37251d',
+        'panel' => '#fdf8f2',
+        'vars' => [
+            'bg' => '#faf4ee',
+            'bg_soft' => '#f5eee7',
+            'bg_strong' => '#eee3d7',
+            'panel' => 'rgba(255,255,255,.95)',
+            'panel_soft' => '#fbf3eb',
+            'muted' => '#7d6a5d',
+            'text' => '#34261f',
+            'accent' => '#6a3f2d',
+            'accent_soft' => '#8c5c49',
+            'line' => '#e7d8cc',
+            'soft' => '#f1e7dc',
+            'sidebar_bg' => 'linear-gradient(180deg, #37251d 0%, #4a3126 100%)',
+            'sidebar_text' => '#f9f1ea',
+            'sidebar_muted' => '#dcc4b4',
+            'sidebar_panel' => 'rgba(255,255,255,.06)',
+            'nav_idle' => 'rgba(255,255,255,.04)',
+            'nav_hover' => 'rgba(255,255,255,.08)',
+            'nav_active' => '#7a4d38',
+            'sidebar_button' => 'rgba(255,255,255,.1)',
+        ],
+    ],
+    'midnight' => [
+        'label' => 'Medianoche',
+        'description' => 'Azul profundo con superficies frias y contraste mas marcado.',
+        'accent' => '#203a67',
+        'sidebar' => '#0f1724',
+        'panel' => '#f3f6fb',
+        'vars' => [
+            'bg' => '#eef2f8',
+            'bg_soft' => '#e8edf6',
+            'bg_strong' => '#dde5f0',
+            'panel' => 'rgba(255,255,255,.94)',
+            'panel_soft' => '#f4f7fb',
+            'muted' => '#687891',
+            'text' => '#202d42',
+            'accent' => '#203a67',
+            'accent_soft' => '#35558c',
+            'line' => '#d4dcea',
+            'soft' => '#e8eef7',
+            'sidebar_bg' => 'linear-gradient(180deg, #0f1724 0%, #182233 100%)',
+            'sidebar_text' => '#eef4fb',
+            'sidebar_muted' => '#b7c4d6',
+            'sidebar_panel' => 'rgba(255,255,255,.06)',
+            'nav_idle' => 'rgba(255,255,255,.04)',
+            'nav_hover' => 'rgba(255,255,255,.08)',
+            'nav_active' => '#253756',
+            'sidebar_button' => 'rgba(255,255,255,.1)',
+        ],
+    ],
+];
+
+$resolveCloudTheme = function (?array $branding) use ($cloudThemePresets) {
+    $preset = (string) data_get($branding ?? [], 'cloud_theme_preset', 'ocean');
+    $selected = $cloudThemePresets[$preset] ?? $cloudThemePresets['ocean'];
+
+    return ['id' => $preset] + $selected['vars'];
+};
+
+View::composer('layouts.app', function ($view) use ($buildStoreContext, $resolveCloudTheme) {
     if (!Auth::check()) {
         return;
     }
@@ -53,10 +175,12 @@ View::composer('layouts.app', function ($view) use ($buildStoreContext) {
     }
 
     [$activeStore, $availableStores] = $buildStoreContext($user);
+    $branding = is_array($activeStore->branding_json) ? $activeStore->branding_json : (json_decode($activeStore->branding_json ?? '[]', true) ?: []);
 
     $view->with([
         'cloudActiveStore' => $activeStore,
         'cloudAvailableStores' => $availableStores,
+        'cloudTheme' => $resolveCloudTheme($branding),
     ]);
 });
 
@@ -543,14 +667,14 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return back()->with('status', "Sucursal activa actualizada a {$store->name}.");
     })->name('context.store');
 
-    Route::get('/settings', function () {
+    Route::get('/settings', function () use ($cloudThemePresets) {
         /** @var User $user */
         $user = Auth::user();
         $tenant = Tenant::query()->findOrFail($user->tenant_id);
         $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
         $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
 
-        return view('settings', compact('user', 'tenant', 'store', 'branding'));
+        return view('settings', compact('user', 'tenant', 'store', 'branding', 'cloudThemePresets'));
     })->name('settings.index');
 
     Route::post('/settings/account', function (Request $request) {
@@ -616,6 +740,25 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
 
         return redirect()->route('settings.index')->with('status', 'Sucursal principal actualizada.');
     })->name('settings.store');
+
+    Route::post('/settings/theme', function (Request $request) use ($cloudThemePresets) {
+        /** @var User $user */
+        $user = Auth::user();
+        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
+        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+
+        $payload = $request->validate([
+            'cloud_theme_preset' => ['required', 'string', Rule::in(array_keys($cloudThemePresets))],
+        ]);
+
+        $branding['cloud_theme_preset'] = $payload['cloud_theme_preset'];
+
+        $store->update([
+            'branding_json' => $branding,
+        ]);
+
+        return redirect()->route('settings.index')->with('status', 'Tema visual actualizado.');
+    })->name('settings.theme');
 
     Route::get('/onboarding', function () {
         /** @var User $user */

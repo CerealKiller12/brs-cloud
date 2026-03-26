@@ -65,10 +65,60 @@
         display: block;
         margin-bottom: 4px;
     }
+    .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .theme-option {
+        display: block;
+        position: relative;
+        cursor: pointer;
+    }
+    .theme-option input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .theme-card {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(247,250,252,.98) 100%);
+        transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+    }
+    .theme-option input:checked + .theme-card {
+        border-color: var(--accent);
+        box-shadow: 0 12px 26px rgba(31, 50, 68, .12);
+        transform: translateY(-1px);
+    }
+    .theme-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: start;
+    }
+    .theme-card p {
+        font-size: 14px;
+    }
+    .theme-swatches {
+        display: flex;
+        gap: 8px;
+    }
+    .theme-swatches span {
+        display: block;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(0,0,0,.08);
+    }
     @media (max-width: 1100px) {
         .settings-top,
         .settings-summary,
-        .settings-form-grid {
+        .settings-form-grid,
+        .theme-grid {
             grid-template-columns: 1fr;
         }
     }
@@ -208,6 +258,48 @@
             </div>
         </form>
     </article>
+</section>
+
+<section class="card settings-form-card">
+    <div class="toolbar">
+        <div>
+            <small class="eyebrow">Tema visual</small>
+            <h3>Apariencia de Venpi Cloud</h3>
+        </div>
+        <span class="pill">Por sucursal</span>
+    </div>
+
+    <form method="POST" action="{{ route('settings.theme') }}" class="grid" style="gap: 18px;">
+        @csrf
+        <div class="theme-grid">
+            @foreach ($cloudThemePresets as $themeId => $theme)
+                <label class="theme-option">
+                    <input
+                        type="radio"
+                        name="cloud_theme_preset"
+                        value="{{ $themeId }}"
+                        {{ old('cloud_theme_preset', data_get($branding, 'cloud_theme_preset', 'ocean')) === $themeId ? 'checked' : '' }}>
+                    <div class="theme-card">
+                        <div class="theme-card-head">
+                            <div>
+                                <strong>{{ $theme['label'] }}</strong>
+                                <p>{{ $theme['description'] }}</p>
+                            </div>
+                            <div class="theme-swatches" aria-hidden="true">
+                                <span style="background: {{ $theme['sidebar'] }};"></span>
+                                <span style="background: {{ $theme['accent'] }};"></span>
+                                <span style="background: {{ $theme['panel'] }};"></span>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+            @endforeach
+        </div>
+
+        <div class="row-actions">
+            <button class="button" type="submit">Guardar tema visual</button>
+        </div>
+    </form>
 </section>
 
 <section class="card settings-form-card">

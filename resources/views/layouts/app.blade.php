@@ -4,20 +4,54 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'Venpi Cloud' }}</title>
+    @php
+        $theme = $cloudTheme ?? [
+        'bg' => '#f3f6f9',
+        'bg_soft' => '#eef4f9',
+        'bg_strong' => '#e9f0f6',
+        'panel' => 'rgba(255,255,255,.94)',
+        'panel_soft' => '#f8fbfd',
+        'muted' => '#6a7a8f',
+        'text' => '#213043',
+        'accent' => '#1f3244',
+        'accent_soft' => '#31506b',
+        'line' => '#d8e0e8',
+        'soft' => '#edf3f8',
+        'sidebar_bg' => 'linear-gradient(180deg, #162330 0%, #1e3142 100%)',
+        'sidebar_text' => '#eef4f8',
+        'sidebar_muted' => '#b7c8d7',
+        'sidebar_panel' => 'rgba(255,255,255,.06)',
+        'nav_idle' => 'rgba(255,255,255,.04)',
+        'nav_hover' => 'rgba(255,255,255,.08)',
+        'nav_active' => '#29475f',
+        'sidebar_button' => 'rgba(255,255,255,.1)',
+    ];
+    @endphp
     <style>
         @view-transition {
             navigation: auto;
         }
         :root {
             color-scheme: light;
-            --bg: #f3f6f9;
-            --panel: rgba(255,255,255,.94);
-            --panel-soft: #f8fbfd;
-            --muted: #6a7a8f;
-            --text: #213043;
-            --accent: #1f3244;
-            --line: #d8e0e8;
-            --soft: #edf3f8;
+            --bg: {{ $theme['bg'] }};
+            --bg-soft: {{ $theme['bg_soft'] }};
+            --bg-strong: {{ $theme['bg_strong'] }};
+            --panel: {{ $theme['panel'] }};
+            --panel-soft: {{ $theme['panel_soft'] }};
+            --muted: {{ $theme['muted'] }};
+            --text: {{ $theme['text'] }};
+            --accent: {{ $theme['accent'] }};
+            --accent-soft: {{ $theme['accent_soft'] }};
+            --line: {{ $theme['line'] }};
+            --soft: {{ $theme['soft'] }};
+            --sidebar-bg: {{ $theme['sidebar_bg'] }};
+            --sidebar-text: {{ $theme['sidebar_text'] }};
+            --sidebar-muted: {{ $theme['sidebar_muted'] }};
+            --sidebar-panel: {{ $theme['sidebar_panel'] }};
+            --nav-idle: {{ $theme['nav_idle'] }};
+            --nav-hover: {{ $theme['nav_hover'] }};
+            --nav-active: {{ $theme['nav_active'] }};
+            --sidebar-button: {{ $theme['sidebar_button'] }};
             --success-bg: #edf7ef;
             --success-line: #c9e6cf;
             --success-text: #24523a;
@@ -27,12 +61,14 @@
         }
         * { box-sizing: border-box; }
         html {
-            background: #eef4f9;
+            background: var(--bg-soft);
         }
         body {
             margin: 0;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: linear-gradient(180deg, #eef4f9 0%, #f3f6f9 28%, #eef3f7 100%);
+            background:
+                radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 26%),
+                linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 28%, var(--bg-strong) 100%);
             color: var(--text);
         }
         ::view-transition-old(root),
@@ -56,15 +92,15 @@
             min-height: 100vh;
         }
         .sidebar {
-            background: #162330;
-            color: #eef4f8;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
             padding: 24px 18px;
             display: flex;
             flex-direction: column;
             gap: 18px;
         }
         .brand {
-            background: rgba(255,255,255,.06);
+            background: var(--sidebar-panel);
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 22px;
             padding: 18px;
@@ -73,7 +109,7 @@
             display: block;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: #c8d4df;
+            color: var(--sidebar-muted);
             font-size: 11px;
             margin-bottom: 6px;
         }
@@ -85,19 +121,19 @@
         .store-context {
             display: grid;
             gap: 12px;
-            background: rgba(255,255,255,.05);
+            background: var(--sidebar-panel);
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 20px;
             padding: 14px;
         }
         .store-context label {
-            color: #b5c5d4;
+            color: var(--sidebar-muted);
             font-size: 12px;
             margin: 0;
         }
         .store-context select {
             background: rgba(255,255,255,.08);
-            color: #eef4f8;
+            color: var(--sidebar-text);
             border-color: rgba(255,255,255,.08);
             padding: 12px 14px;
             font-size: 14px;
@@ -105,32 +141,32 @@
         .store-meta {
             display: grid;
             gap: 6px;
-            color: #d3dee8;
+            color: var(--sidebar-muted);
             font-size: 13px;
         }
         .store-meta strong {
             font-size: 18px;
-            color: #fff;
+            color: var(--sidebar-text);
         }
         .nav-section { display: grid; gap: 8px; }
         .nav-section span {
             font-size: 11px;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: #9eb1c1;
+            color: var(--sidebar-muted);
             padding: 0 8px;
         }
         .nav-link {
             padding: 14px 16px;
             border-radius: 16px;
-            background: rgba(255,255,255,.04);
+            background: var(--nav-idle);
             border: 1px solid transparent;
             transition: background .18s ease, border-color .18s ease;
         }
-        .nav-link:hover { background: rgba(255,255,255,.08); }
+        .nav-link:hover { background: var(--nav-hover); }
         .nav-link.active,
         .nav-link.is-pending {
-            background: #29475f;
+            background: var(--nav-active);
             border-color: rgba(255,255,255,.08);
         }
         .nav-link.is-pending {
@@ -142,8 +178,8 @@
             border: 0;
             border-radius: 14px;
             padding: 12px 16px;
-            background: rgba(255,255,255,.1);
-            color: #fff;
+            background: var(--sidebar-button);
+            color: var(--sidebar-text);
             cursor: pointer;
         }
         .content {
