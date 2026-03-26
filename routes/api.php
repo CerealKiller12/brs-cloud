@@ -259,6 +259,229 @@ $issueDeviceTokenForStore = function (object $store, array $payload, Request $re
     ]);
 };
 
+$buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
+    $now = now();
+    $todayStart = now()->copy()->startOfDay();
+    $yesterdayStart = $todayStart->copy()->subDay();
+    $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
+    $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
+
+    $store = DB::table('stores')
+        ->where('tenant_id', $tenantId)
+        ->where('id', $storeId)
+        ->select(['id', 'name', 'code', 'catalog_version'])
+        ->first();
+
+    abort_unless($store, 404, 'No pude encontrar esa sucursal en Venpi Cloud.');
+
+    $deviceMetaById = Device::query()
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->get(['device_id', 'name', 'platform'])
+        ->keyBy('device_id');
+
+    $salesHistory = DB::table('sync_events')
+        ->select(['device_id', 'payload_json', 'occurred_at', 'received_at'])
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->where('event_type', 'sale.created')
+        ->where('received_at', '>=', $thirtyDaysAgo)
+        ->orderBy('received_at')
+        ->get()
+        ->map(function ($event) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+
+            try {
+                $occurredAt = !empty($payload['createdAt'])
+                    ? Carbon::parse($payload['createdAt'])
+                    : (!empty($event->occurred_at)
+                        ? Carbon::parse($event->occurred_at)
+                        : Carbon::parse($event->received_at));
+            } catch (\Throwable) {
+                $occurredAt = Carbon::parse($event->received_at);
+            }
+
+            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+
+            return (object) [
+                'device_id' => $event->device_id,
+                'occurred_at' => $occurredAt,
+                'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                'items' => is_array($items) ? $items : [],
+            ];
+        })
+        ->values();
+
+    $salesLast7Days = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
+        ->values();
+
+    $salesTodayCollection = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
+        ->values();
+
+    $salesYesterdayCollection = $salesHistory
+        ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
+        ->values();
+
+    $salesTodayAmountCents = (int) $salesTodayCollection->sum('total_cents');
+    $salesYesterdayAmountCents = (int) $salesYesterdayCollection->sum('total_cents');
+    $salesTodayCount = (int) $salesTodayCollection->count();
+    $salesLast7DaysCount = (int) $salesLast7Days->count();
+    $salesLast7DaysAmountCents = (int) $salesLast7Days->sum('total_cents');
+    $averageTicketTodayCents = $salesTodayCount > 0 ? (int) round($salesTodayAmountCents / $salesTodayCount) : 0;
+
+    $salesDeltaPercent = null;
+    if ($salesYesterdayAmountCents > 0) {
+        $salesDeltaPercent = (int) round((($salesTodayAmountCents - $salesYesterdayAmountCents) / $salesYesterdayAmountCents) * 100);
+    } elseif ($salesTodayAmountCents > 0) {
+        $salesDeltaPercent = 100;
+    }
+
+    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days) {
+        $day = now()->copy()->subDays($daysAgo);
+        $rows = $salesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
+
+        return [
+            'label' => $day->locale('es_MX')->translatedFormat('D j'),
+            'tickets' => (int) $rows->count(),
+            'amountCents' => (int) $rows->sum('total_cents'),
+        ];
+    })->values();
+
+    $paymentLabels = [
+        'cash' => 'Efectivo',
+        'card' => 'Tarjeta',
+        'transfer' => 'Transferencia',
+        'mixed' => 'Mixto',
+    ];
+
+    $paymentMix = collect($paymentLabels)
+        ->map(function (string $label, string $key) use ($salesLast7Days) {
+            $rows = $salesLast7Days->filter(fn ($sale) => $sale->payment_method === $key);
+
+            return [
+                'key' => $key,
+                'label' => $label,
+                'tickets' => (int) $rows->count(),
+                'amountCents' => (int) $rows->sum('total_cents'),
+            ];
+        })
+        ->filter(fn ($row) => $row['tickets'] > 0 || $row['amountCents'] > 0)
+        ->values();
+
+    $catalogProducts = DB::table('cloud_catalog_products')
+        ->where('store_id', $storeId)
+        ->get(['sku', 'name'])
+        ->mapWithKeys(fn ($product) => [[mb_strtolower(trim((string) $product->sku)) => $product->name]]);
+
+    $topProducts = $salesLast7Days
+        ->flatMap(function ($sale) {
+            return collect($sale->items)->map(function ($item) {
+                $quantity = (int) ($item['quantity'] ?? 0);
+                $amount = (int) ($item['totalCents'] ?? (($item['unitPriceCents'] ?? 0) * $quantity));
+
+                return [
+                    'sku' => trim((string) ($item['productSku'] ?? '')),
+                    'quantity' => $quantity,
+                    'amountCents' => max(0, $amount),
+                ];
+            });
+        })
+        ->filter(fn ($item) => $item['sku'] !== '' && $item['quantity'] > 0)
+        ->groupBy(fn ($item) => mb_strtolower($item['sku']))
+        ->map(function ($rows, string $skuKey) use ($catalogProducts) {
+            $sku = (string) ($rows->first()['sku'] ?? $skuKey);
+
+            return [
+                'sku' => $sku,
+                'name' => $catalogProducts[$skuKey] ?? $sku,
+                'quantity' => (int) $rows->sum('quantity'),
+                'tickets' => (int) $rows->count(),
+                'amountCents' => (int) $rows->sum('amountCents'),
+            ];
+        })
+        ->sortByDesc('amountCents')
+        ->take(5)
+        ->values();
+
+    $deviceSales = $salesLast7Days
+        ->groupBy('device_id')
+        ->map(function ($rows, string $deviceId) use ($deviceMetaById) {
+            $meta = $deviceMetaById->get($deviceId);
+            $tickets = (int) $rows->count();
+            $amountCents = (int) $rows->sum('total_cents');
+
+            return [
+                'deviceId' => $deviceId,
+                'label' => trim((string) ($meta->name ?? '')) !== '' ? (string) $meta->name : $deviceId,
+                'tickets' => $tickets,
+                'amountCents' => $amountCents,
+                'averageTicketCents' => $tickets > 0 ? (int) round($amountCents / $tickets) : 0,
+            ];
+        })
+        ->sortByDesc('amountCents')
+        ->take(5)
+        ->values();
+
+    $lowStockProducts = DB::table('cloud_catalog_products')
+        ->where('store_id', $storeId)
+        ->where('is_active', true)
+        ->where('track_inventory', true)
+        ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+        ->orderBy('stock_on_hand')
+        ->limit(5)
+        ->get(['name', 'sku', 'stock_on_hand', 'reorder_point'])
+        ->map(fn ($product) => [
+            'name' => (string) $product->name,
+            'sku' => (string) $product->sku,
+            'stockOnHand' => (int) $product->stock_on_hand,
+            'reorderPoint' => (int) $product->reorder_point,
+        ])
+        ->values();
+
+    return [
+        'store' => [
+            'id' => (int) $store->id,
+            'name' => (string) $store->name,
+            'code' => (string) $store->code,
+            'catalogVersion' => (int) $store->catalog_version,
+        ],
+        'stats' => [
+            'onlineDevices' => (int) DB::table('devices')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
+                ->count(),
+            'catalogItems' => (int) DB::table('cloud_catalog_products')->where('store_id', $storeId)->count(),
+            'pendingEvents' => (int) DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'conflicts' => (int) DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->whereNotNull('apply_error')
+                ->count(),
+            'lowStock' => (int) DB::table('cloud_catalog_products')
+                ->where('store_id', $storeId)
+                ->where('is_active', true)
+                ->where('track_inventory', true)
+                ->whereColumn('stock_on_hand', '<=', 'reorder_point')
+                ->count(),
+            'salesToday' => $salesTodayCount,
+            'salesTodayAmountCents' => $salesTodayAmountCents,
+            'averageTicketTodayCents' => $averageTicketTodayCents,
+            'salesLast7Days' => $salesLast7DaysCount,
+            'salesLast7DaysAmountCents' => $salesLast7DaysAmountCents,
+            'salesDeltaPercent' => $salesDeltaPercent,
+        ],
+        'salesTimeline' => $salesTimeline,
+        'paymentMix' => $paymentMix,
+        'topProducts' => $topProducts,
+        'deviceSales' => $deviceSales,
+        'lowStockProducts' => $lowStockProducts,
+    ];
+};
+
 Route::post('/auth/login', function (Request $request) {
     $payload = $request->validate([
         'email' => ['required', 'email'],
@@ -354,6 +577,24 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request 
     return response()->json([
         'items' => $stores,
     ]);
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/dashboard-summary', function (Request $request) use ($buildDashboardSummaryForStore) {
+    /** @var User $user */
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+
+    $storeId = $request->integer('store_id') ?: $user->store_id;
+    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar el resumen.');
+
+    $exists = DB::table('stores')
+        ->where('tenant_id', $user->tenant_id)
+        ->where('id', $storeId)
+        ->exists();
+
+    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+
+    return response()->json($buildDashboardSummaryForStore((int) $user->tenant_id, (int) $storeId));
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) {
