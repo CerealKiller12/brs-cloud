@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'Venpi Cloud' }}</title>
     <style>
+        @view-transition {
+            navigation: auto;
+        }
         :root {
             color-scheme: light;
             --bg: #f3f6f9;
@@ -23,11 +26,19 @@
             --danger-text: #9d4635;
         }
         * { box-sizing: border-box; }
+        html {
+            background: #eef4f9;
+        }
         body {
             margin: 0;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: linear-gradient(180deg, #eef4f9 0%, #f3f6f9 28%, #eef3f7 100%);
             color: var(--text);
+        }
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+            animation-duration: .16s;
+            animation-timing-function: ease;
         }
         a { color: inherit; text-decoration: none; }
         code {
@@ -117,9 +128,13 @@
             transition: background .18s ease, border-color .18s ease;
         }
         .nav-link:hover { background: rgba(255,255,255,.08); }
-        .nav-link.active {
+        .nav-link.active,
+        .nav-link.is-pending {
             background: #29475f;
             border-color: rgba(255,255,255,.08);
+        }
+        .nav-link.is-pending {
+            box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset;
         }
         .sidebar form { margin-top: auto; }
         .sidebar button {
@@ -135,6 +150,14 @@
             padding: 24px;
             display: grid;
             gap: 20px;
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            .content {
+                transition: opacity .16s ease;
+            }
+            body.nav-transitioning .content {
+                opacity: .92;
+            }
         }
         @media (min-width: 821px) {
             html, body {
@@ -508,5 +531,32 @@
     @yield('content')
 @endauth
 @stack('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const navLinks = Array.from(document.querySelectorAll('.sidebar .nav-link'));
+
+        navLinks.forEach((link) => {
+            link.addEventListener('click', (event) => {
+                if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                const href = link.getAttribute('href');
+                if (!href || link.classList.contains('active')) {
+                    return;
+                }
+
+                document.body.classList.add('nav-transitioning');
+                navLinks.forEach((item) => item.classList.remove('is-pending'));
+                link.classList.add('is-pending');
+            });
+        });
+
+        window.addEventListener('pageshow', () => {
+            document.body.classList.remove('nav-transitioning');
+            navLinks.forEach((item) => item.classList.remove('is-pending'));
+        });
+    });
+</script>
 </body>
 </html>
