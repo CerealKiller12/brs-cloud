@@ -20,7 +20,7 @@ $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
     $stores = Store::query()
         ->where('tenant_id', $user->tenant_id)
         ->orderBy('name')
-        ->get(['id', 'name', 'code', 'catalog_version', 'timezone', 'is_active']);
+        ->get(['id', 'name', 'code', 'catalog_version', 'timezone', 'is_active', 'branding_json']);
 
     abort_unless($stores->isNotEmpty(), 403, 'Este negocio todavia no tiene sucursales configuradas.');
 
