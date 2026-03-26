@@ -266,8 +266,13 @@
             <small class="eyebrow">Tema visual</small>
             <h3>Apariencia de Venpi Cloud</h3>
         </div>
-        <span class="pill">Por sucursal</span>
+        <span class="pill">{{ ($themeStore ?? $store)->name }}</span>
     </div>
+
+    <p class="muted" style="margin-bottom: 18px;">
+        Este tema se aplica a la sucursal activa del panel lateral:
+        <strong style="color: var(--text);">{{ ($themeStore ?? $store)->name }}</strong>.
+    </p>
 
     <form method="POST" action="{{ route('settings.theme') }}" class="grid" style="gap: 18px;">
         @csrf
@@ -278,7 +283,7 @@
                         type="radio"
                         name="cloud_theme_preset"
                         value="{{ $themeId }}"
-                        {{ old('cloud_theme_preset', data_get($branding, 'cloud_theme_preset', 'ocean')) === $themeId ? 'checked' : '' }}>
+                        {{ old('cloud_theme_preset', data_get($themeBranding ?? $branding, 'cloud_theme_preset', 'ocean')) === $themeId ? 'checked' : '' }}>
                     <div class="theme-card">
                         <div class="theme-card-head">
                             <div>
