@@ -25,6 +25,10 @@
         'nav_hover' => 'rgba(255,255,255,.08)',
         'nav_active' => '#29475f',
         'sidebar_button' => 'rgba(255,255,255,.1)',
+        'button_primary_bg' => '#231910',
+        'button_primary_text' => '#ffffff',
+        'button_secondary_bg' => '#efe2d3',
+        'button_secondary_text' => '#3b2a1f',
         'label' => 'Costa',
     ];
     @endphp
@@ -34,25 +38,29 @@
         }
         :root {
             color-scheme: light;
-            --bg: {{ $theme['bg'] }};
-            --bg-soft: {{ $theme['bg_soft'] }};
-            --bg-strong: {{ $theme['bg_strong'] }};
-            --panel: {{ $theme['panel'] }};
-            --panel-soft: {{ $theme['panel_soft'] }};
-            --muted: {{ $theme['muted'] }};
-            --text: {{ $theme['text'] }};
-            --accent: {{ $theme['accent'] }};
-            --accent-soft: {{ $theme['accent_soft'] }};
-            --line: {{ $theme['line'] }};
-            --soft: {{ $theme['soft'] }};
-            --sidebar-bg: {{ $theme['sidebar_bg'] }};
-            --sidebar-text: {{ $theme['sidebar_text'] }};
-            --sidebar-muted: {{ $theme['sidebar_muted'] }};
-            --sidebar-panel: {{ $theme['sidebar_panel'] }};
-            --nav-idle: {{ $theme['nav_idle'] }};
-            --nav-hover: {{ $theme['nav_hover'] }};
-            --nav-active: {{ $theme['nav_active'] }};
-            --sidebar-button: {{ $theme['sidebar_button'] }};
+            --bg: #f3f6f9;
+            --bg-soft: #eef4f9;
+            --bg-strong: #e9f0f6;
+            --panel: rgba(255,255,255,.94);
+            --panel-soft: #f8fbfd;
+            --muted: #6a7a8f;
+            --text: #213043;
+            --accent: #1f3244;
+            --accent-soft: #31506b;
+            --line: #d8e0e8;
+            --soft: #edf3f8;
+            --sidebar-bg: linear-gradient(180deg, #162330 0%, #1e3142 100%);
+            --sidebar-text: #eef4f8;
+            --sidebar-muted: #b7c8d7;
+            --sidebar-panel: rgba(255,255,255,.06);
+            --nav-idle: rgba(255,255,255,.04);
+            --nav-hover: rgba(255,255,255,.08);
+            --nav-active: #29475f;
+            --sidebar-button: rgba(255,255,255,.1);
+            --button-primary-bg: #231910;
+            --button-primary-text: #ffffff;
+            --button-secondary-bg: #efe2d3;
+            --button-secondary-text: #3b2a1f;
             --success-bg: #edf7ef;
             --success-line: #c9e6cf;
             --success-text: #24523a;
@@ -105,7 +113,6 @@
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 22px;
             padding: 18px;
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
         }
         .brand small {
             display: block;
@@ -127,7 +134,6 @@
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 20px;
             padding: 14px;
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
         }
         .store-context label {
             color: var(--sidebar-muted);
@@ -233,7 +239,7 @@
             font-size: 11px;
             letter-spacing: .14em;
             text-transform: uppercase;
-            color: var(--accent-soft);
+            color: #9b6b3d;
             margin-bottom: 10px;
         }
         h1, h2, h3, h4 { margin: 0; }
@@ -263,7 +269,7 @@
             font-size: 12px;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+            color: #70849a;
             margin-bottom: 12px;
         }
         .stat-value {
@@ -296,7 +302,7 @@
             font-size: 12px;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+            color: #70849a;
             font-weight: 600;
         }
         .pill {
@@ -308,7 +314,7 @@
             border: 1px solid var(--line);
             background: var(--soft);
             font-size: 13px;
-            color: color-mix(in srgb, var(--accent) 70%, var(--text));
+            color: #486175;
         }
         .pill.success {
             background: #eef7ef;
@@ -357,7 +363,7 @@
         label {
             display: block;
             font-size: 14px;
-            color: color-mix(in srgb, var(--accent) 40%, var(--muted));
+            color: #536a80;
             margin-bottom: 8px;
         }
         input,
@@ -388,12 +394,12 @@
             font-weight: 600;
         }
         .button {
-            background: var(--accent);
-            color: #fff;
+            background: var(--button-primary-bg);
+            color: var(--button-primary-text);
         }
         .button-secondary {
-            background: var(--soft);
-            color: color-mix(in srgb, var(--accent) 72%, var(--text));
+            background: var(--button-secondary-bg);
+            color: var(--button-secondary-text);
             border: 1px solid var(--line);
         }
         .button-danger {
@@ -466,26 +472,12 @@
             border-radius: 14px;
             border: 1px solid var(--line);
             background: var(--panel-soft);
-            color: color-mix(in srgb, var(--accent) 70%, var(--text));
+            color: #486175;
             font-size: 14px;
             line-height: 1;
         }
         .pagination a:hover {
-            background: color-mix(in srgb, var(--accent) 10%, var(--soft));
-        }
-        .theme-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 10px;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 24%, transparent);
-            color: var(--sidebar-text);
-            border: 1px solid color-mix(in srgb, var(--accent) 32%, rgba(255,255,255,.08));
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: .06em;
-            text-transform: uppercase;
+            background: #eaf1f6;
         }
         .pagination span[aria-current="page"] > span {
             background: var(--accent);
@@ -531,7 +523,33 @@
     </style>
     @stack('head')
 </head>
-<body>
+<body
+    data-cloud-theme="{{ $theme['id'] ?? 'ocean' }}"
+    style="
+        --bg: {{ $theme['bg'] }};
+        --bg-soft: {{ $theme['bg_soft'] }};
+        --bg-strong: {{ $theme['bg_strong'] }};
+        --panel: {{ $theme['panel'] }};
+        --panel-soft: {{ $theme['panel_soft'] }};
+        --muted: {{ $theme['muted'] }};
+        --text: {{ $theme['text'] }};
+        --accent: {{ $theme['accent'] }};
+        --accent-soft: {{ $theme['accent_soft'] }};
+        --line: {{ $theme['line'] }};
+        --soft: {{ $theme['soft'] }};
+        --sidebar-bg: {{ $theme['sidebar_bg'] }};
+        --sidebar-text: {{ $theme['sidebar_text'] }};
+        --sidebar-muted: {{ $theme['sidebar_muted'] }};
+        --sidebar-panel: {{ $theme['sidebar_panel'] }};
+        --nav-idle: {{ $theme['nav_idle'] }};
+        --nav-hover: {{ $theme['nav_hover'] }};
+        --nav-active: {{ $theme['nav_active'] }};
+        --sidebar-button: {{ $theme['sidebar_button'] }};
+        --button-primary-bg: {{ $theme['button_primary_bg'] }};
+        --button-primary-text: {{ $theme['button_primary_text'] }};
+        --button-secondary-bg: {{ $theme['button_secondary_bg'] }};
+        --button-secondary-text: {{ $theme['button_secondary_text'] }};
+    ">
 @auth
     <div class="shell">
         <aside class="sidebar">
@@ -546,7 +564,6 @@
                         <span>Sucursal activa</span>
                         <strong>{{ $cloudActiveStore->name }}</strong>
                         <span>{{ $cloudActiveStore->code }} · Catalogo v{{ $cloudActiveStore->catalog_version }}</span>
-                        <span class="theme-indicator">Tema {{ $theme['label'] }}</span>
                     </div>
                     <form method="POST" action="{{ route('context.store') }}">
                         @csrf

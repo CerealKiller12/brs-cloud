@@ -67,6 +67,10 @@ $cloudThemePresets = [
             'nav_hover' => 'rgba(255,255,255,.08)',
             'nav_active' => '#4a3428',
             'sidebar_button' => 'rgba(255,255,255,.1)',
+            'button_primary_bg' => '#231910',
+            'button_primary_text' => '#ffffff',
+            'button_secondary_bg' => '#efe2d3',
+            'button_secondary_text' => '#3b2a1f',
         ],
     ],
     'ocean' => [
@@ -270,8 +274,13 @@ $cloudThemePresets = [
 $resolveCloudTheme = function (?array $branding) use ($cloudThemePresets) {
     $preset = (string) data_get($branding ?? [], 'cloud_theme_preset', 'ocean');
     $selected = $cloudThemePresets[$preset] ?? $cloudThemePresets['ocean'];
+    $vars = $selected['vars'];
+    $vars['button_primary_bg'] = $vars['button_primary_bg'] ?? ($vars['text'] ?? $vars['accent']);
+    $vars['button_primary_text'] = $vars['button_primary_text'] ?? '#ffffff';
+    $vars['button_secondary_bg'] = $vars['button_secondary_bg'] ?? ($vars['soft'] ?? '#edf3f8');
+    $vars['button_secondary_text'] = $vars['button_secondary_text'] ?? ($vars['text'] ?? '#213043');
 
-    return ['id' => $preset, 'label' => $selected['label']] + $selected['vars'];
+    return ['id' => $preset, 'label' => $selected['label']] + $vars;
 };
 
 View::composer('layouts.app', function ($view) use ($buildStoreContext, $resolveCloudTheme) {
