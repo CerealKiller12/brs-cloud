@@ -130,9 +130,9 @@
         min-height: 220px;
     }
     .chart-wrap canvas {
-        width: 100% !important;
+        display: block;
+        width: 100%;
         max-width: 100%;
-        height: 100% !important;
     }
     .mini-metrics {
         display: grid;
@@ -280,21 +280,35 @@
         color: var(--muted);
         line-height: 1.6;
     }
+    .scope-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 16px 18px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: var(--panel-soft);
+    }
+    .scope-nav-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
     .money-value {
         font-variant-numeric: tabular-nums;
     }
     @media (max-width: 1280px) {
         .dash-hero,
+        .dash-grid-2,
         .dash-grid-split,
+        .kpi-grid,
         .kpi-grid-4,
         .mini-metrics,
-        .scope-strip {
+        .scope-strip,
+        .dash-grid-3 {
             grid-template-columns: 1fr 1fr;
-        }
-        .dash-grid-2,
-        .dash-grid-3,
-        .kpi-grid {
-            grid-template-columns: 1fr;
         }
     }
     @media (max-width: 820px) {
@@ -376,8 +390,19 @@
     </div>
 </section>
 
+<section class="scope-nav">
+    <div>
+        <small class="eyebrow">Cambiar enfoque</small>
+        <p>Usa estas vistas para brincar directo entre el resumen global del negocio y el detalle operativo de la sucursal activa.</p>
+    </div>
+    <div class="scope-nav-actions">
+        <a class="button-secondary" href="#negocio-general">Ver negocio completo</a>
+        <a class="button-secondary" href="#sucursal-activa">Ver sucursal activa</a>
+    </div>
+</section>
+
 <section class="dash-grid dash-grid-split">
-    <article class="card">
+    <article class="card" id="negocio-general">
         <div class="section-title">
             <div>
                 <small class="eyebrow">Resumen del negocio</small>
@@ -410,7 +435,7 @@
         </section>
     </article>
 
-    <article class="card">
+    <article class="card" id="sucursal-activa">
         <div class="section-title">
             <div>
                 <small class="eyebrow">Sucursal activa</small>
