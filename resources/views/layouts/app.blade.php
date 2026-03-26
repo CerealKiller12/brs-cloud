@@ -25,6 +25,7 @@
         'nav_hover' => 'rgba(255,255,255,.08)',
         'nav_active' => '#29475f',
         'sidebar_button' => 'rgba(255,255,255,.1)',
+        'label' => 'Costa',
     ];
     @endphp
     <style>
@@ -104,6 +105,7 @@
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 22px;
             padding: 18px;
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
         }
         .brand small {
             display: block;
@@ -125,6 +127,7 @@
             border: 1px solid rgba(255,255,255,.08);
             border-radius: 20px;
             padding: 14px;
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
         }
         .store-context label {
             color: var(--sidebar-muted);
@@ -230,7 +233,7 @@
             font-size: 11px;
             letter-spacing: .14em;
             text-transform: uppercase;
-            color: #9b6b3d;
+            color: var(--accent-soft);
             margin-bottom: 10px;
         }
         h1, h2, h3, h4 { margin: 0; }
@@ -260,7 +263,7 @@
             font-size: 12px;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: #70849a;
+            color: color-mix(in srgb, var(--accent) 55%, var(--muted));
             margin-bottom: 12px;
         }
         .stat-value {
@@ -293,7 +296,7 @@
             font-size: 12px;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: #70849a;
+            color: color-mix(in srgb, var(--accent) 55%, var(--muted));
             font-weight: 600;
         }
         .pill {
@@ -305,7 +308,7 @@
             border: 1px solid var(--line);
             background: var(--soft);
             font-size: 13px;
-            color: #486175;
+            color: color-mix(in srgb, var(--accent) 70%, var(--text));
         }
         .pill.success {
             background: #eef7ef;
@@ -354,7 +357,7 @@
         label {
             display: block;
             font-size: 14px;
-            color: #536a80;
+            color: color-mix(in srgb, var(--accent) 40%, var(--muted));
             margin-bottom: 8px;
         }
         input,
@@ -390,7 +393,7 @@
         }
         .button-secondary {
             background: var(--soft);
-            color: #3d566d;
+            color: color-mix(in srgb, var(--accent) 72%, var(--text));
             border: 1px solid var(--line);
         }
         .button-danger {
@@ -463,12 +466,26 @@
             border-radius: 14px;
             border: 1px solid var(--line);
             background: var(--panel-soft);
-            color: #486175;
+            color: color-mix(in srgb, var(--accent) 70%, var(--text));
             font-size: 14px;
             line-height: 1;
         }
         .pagination a:hover {
-            background: #eaf1f6;
+            background: color-mix(in srgb, var(--accent) 10%, var(--soft));
+        }
+        .theme-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 24%, transparent);
+            color: var(--sidebar-text);
+            border: 1px solid color-mix(in srgb, var(--accent) 32%, rgba(255,255,255,.08));
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .06em;
+            text-transform: uppercase;
         }
         .pagination span[aria-current="page"] > span {
             background: var(--accent);
@@ -529,6 +546,7 @@
                         <span>Sucursal activa</span>
                         <strong>{{ $cloudActiveStore->name }}</strong>
                         <span>{{ $cloudActiveStore->code }} · Catalogo v{{ $cloudActiveStore->catalog_version }}</span>
+                        <span class="theme-indicator">Tema {{ $theme['label'] }}</span>
                     </div>
                     <form method="POST" action="{{ route('context.store') }}">
                         @csrf

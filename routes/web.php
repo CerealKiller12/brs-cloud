@@ -271,7 +271,7 @@ $resolveCloudTheme = function (?array $branding) use ($cloudThemePresets) {
     $preset = (string) data_get($branding ?? [], 'cloud_theme_preset', 'ocean');
     $selected = $cloudThemePresets[$preset] ?? $cloudThemePresets['ocean'];
 
-    return ['id' => $preset] + $selected['vars'];
+    return ['id' => $preset, 'label' => $selected['label']] + $selected['vars'];
 };
 
 View::composer('layouts.app', function ($view) use ($buildStoreContext, $resolveCloudTheme) {
