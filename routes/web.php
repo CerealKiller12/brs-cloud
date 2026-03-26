@@ -40,6 +40,46 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
     return $activeStore;
 };
 
+$buildBusinessDashboardData = function (User $user, Request $request) {
+    $editId = $request->integer('edit');
+
+    $stores = Store::query()
+        ->where('tenant_id', $user->tenant_id)
+        ->orderBy('name')
+        ->get();
+
+    $storeIds = $stores->pluck('id');
+
+    $deviceCounts = $storeIds->isEmpty()
+        ? collect()
+        : DB::table('devices')
+            ->select('store_id', DB::raw('count(*) as aggregate'))
+            ->whereIn('store_id', $storeIds)
+            ->groupBy('store_id')
+            ->pluck('aggregate', 'store_id');
+
+    $catalogCounts = $storeIds->isEmpty()
+        ? collect()
+        : DB::table('cloud_catalog_products')
+            ->select('store_id', DB::raw('count(*) as aggregate'))
+            ->whereIn('store_id', $storeIds)
+            ->groupBy('store_id')
+            ->pluck('aggregate', 'store_id');
+
+    $storeStats = [
+        'total' => $stores->count(),
+        'active' => $stores->where('is_active', true)->count(),
+        'devices' => $deviceCounts->sum(),
+        'catalogItems' => $catalogCounts->sum(),
+    ];
+
+    $editStore = $editId
+        ? Store::query()->where('tenant_id', $user->tenant_id)->where('id', $editId)->first()
+        : null;
+
+    return compact('stores', 'editStore', 'deviceCounts', 'catalogCounts', 'storeStats');
+};
+
 $cloudThemePresets = [
     'amber' => [
         'label' => 'Ambar',
@@ -938,7 +978,16 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return redirect()->route('dashboard')->with('status', 'Configuracion inicial completada.');
     })->name('onboarding.store');
 
-    Route::get('/dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+    Route::get('/dashboard', function (Request $request) use ($buildBusinessDashboardData) {
+        /** @var User $user */
+        $user = Auth::user();
+        $businessDashboard = $buildBusinessDashboardData($user, $request);
+        $businessDashboard['pageMode'] = 'dashboard';
+
+        return view('stores.index', $businessDashboard);
+    })->name('dashboard');
+
+    Route::get('/store-dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
         /** @var User $user */
         $user = Auth::user();
         $tenantId = $user->tenant_id;
@@ -1169,7 +1218,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 'done' => $stats['stores'] > 0,
                 'title' => 'Ya tienes una sucursal lista',
                 'detail' => 'Tu operacion principal ya puede recibir cajas y catalogo compartido.',
-                'cta' => route('stores.index'),
+                'cta' => route('dashboard'),
                 'ctaLabel' => 'Ver sucursales',
             ],
             [
@@ -1227,48 +1276,15 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'lowStockProducts',
             'nextSteps'
         ));
-    })->name('dashboard');
+    })->name('store.dashboard');
 
-    Route::get('/stores', function (Request $request) {
+    Route::get('/stores', function (Request $request) use ($buildBusinessDashboardData) {
         /** @var User $user */
         $user = Auth::user();
-        $editId = $request->integer('edit');
+        $businessDashboard = $buildBusinessDashboardData($user, $request);
+        $businessDashboard['pageMode'] = 'stores';
 
-        $stores = Store::query()
-            ->where('tenant_id', $user->tenant_id)
-            ->orderBy('name')
-            ->get();
-
-        $storeIds = $stores->pluck('id');
-
-        $deviceCounts = $storeIds->isEmpty()
-            ? collect()
-            : DB::table('devices')
-                ->select('store_id', DB::raw('count(*) as aggregate'))
-                ->whereIn('store_id', $storeIds)
-                ->groupBy('store_id')
-                ->pluck('aggregate', 'store_id');
-
-        $catalogCounts = $storeIds->isEmpty()
-            ? collect()
-            : DB::table('cloud_catalog_products')
-                ->select('store_id', DB::raw('count(*) as aggregate'))
-                ->whereIn('store_id', $storeIds)
-                ->groupBy('store_id')
-                ->pluck('aggregate', 'store_id');
-
-        $storeStats = [
-            'total' => $stores->count(),
-            'active' => $stores->where('is_active', true)->count(),
-            'devices' => $deviceCounts->sum(),
-            'catalogItems' => $catalogCounts->sum(),
-        ];
-
-        $editStore = $editId
-            ? Store::query()->where('tenant_id', $user->tenant_id)->where('id', $editId)->first()
-            : null;
-
-        return view('stores.index', compact('stores', 'editStore', 'deviceCounts', 'catalogCounts', 'storeStats'));
+        return view('stores.index', $businessDashboard);
     })->name('stores.index');
 
     Route::post('/stores', function (Request $request) {
@@ -1301,7 +1317,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index')->with('status', 'Sucursal creada correctamente.');
+        return redirect()->route('dashboard')->with('status', 'Sucursal creada correctamente.');
     })->name('stores.store');
 
     Route::put('/stores/{storeId}', function (Request $request, int $storeId) {
@@ -1334,7 +1350,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index')->with('status', 'Sucursal actualizada.');
+        return redirect()->route('dashboard')->with('status', 'Sucursal actualizada.');
     })->name('stores.update');
 
     Route::post('/stores/{storeId}/rotate-key', function (int $storeId) {
@@ -1351,7 +1367,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('stores.index', ['edit' => $storeId])->with('status', 'Se renovo el acceso para nuevas cajas en esta sucursal.');
+        return redirect()->route('dashboard', ['edit' => $storeId])->with('status', 'Se renovo el acceso para nuevas cajas en esta sucursal.');
     })->name('stores.rotate-key');
 
     Route::get('/devices', function (Request $request) use ($resolveStoreForUser) {
@@ -1448,7 +1464,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
 
         $deviceStats['withConflicts'] = $conflictedDeviceIds->count();
 
-        return view('devices.index', compact('devices', 'tokenCounts', 'syncHealthByDevice', 'deviceStats', 'storeOptions', 'storeNames', 'deviceSuggestions', 'search', 'storeFilter'));
+        return view('devices.index', compact('devices', 'tokenCounts', 'syncHealthByDevice', 'deviceStats', 'storeOptions', 'storeNames', 'deviceSuggestions', 'search', 'storeFilter', 'activeStore'));
     })->name('devices.index');
 
     Route::post('/devices/{deviceId}/revoke-token', function (int $deviceId) {
@@ -1559,7 +1575,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             })
         );
 
-        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'eventTypeOptions', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes'));
+        return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'eventTypeOptions', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes', 'activeStore'));
     })->name('sync.index');
 
     Route::get('/catalog', function (Request $request) use ($resolveStoreForUser) {

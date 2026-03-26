@@ -115,9 +115,9 @@
 
 @section('content')
 <section class="hero">
-    <small>Cajas conectadas</small>
-    <h2>La salud de tus cajas, sin ruido tecnico</h2>
-    <p>Revisa rapido cuales cajas estan activas, cuales se enfriaron y cuales necesitan una accion para volver a quedar al dia.</p>
+    <small>Sucursal activa</small>
+    <h2>Cajas conectadas en {{ $activeStore->name ?? 'esta sucursal' }}</h2>
+    <p>Revisa rapido cuales cajas de esta sucursal siguen activas, cuales se enfriaron y cuales necesitan una accion para volver a quedar al dia.</p>
 </section>
 
 @if (session('status'))
@@ -128,7 +128,7 @@
     <article class="stat">
         <div class="stat-label">Cajas</div>
         <div class="stat-value">{{ $deviceStats['total'] }}</div>
-        <div class="stat-note">registradas en tu cuenta</div>
+        <div class="stat-note">registradas en esta sucursal</div>
     </article>
     <article class="stat">
         <div class="stat-label">iOS</div>
@@ -162,9 +162,9 @@
         <article class="card device-filter-card">
             <div class="toolbar">
                 <div>
-                    <small class="eyebrow">Buscador</small>
+                    <small class="eyebrow">Sucursal activa</small>
                     <h3>Encuentra la caja que quieres revisar</h3>
-                    <p>Filtra por nombre, plataforma o sucursal para centrarte solo en las cajas que te interesa revisar hoy.</p>
+                    <p>Estas viendo las cajas de <strong>{{ $activeStore->name ?? 'la sucursal activa' }}</strong>. Filtra por nombre o plataforma para centrarte en las que te interesa revisar hoy.</p>
                 </div>
             </div>
             <form method="GET" action="{{ route('devices.index') }}" class="grid grid-2">
@@ -178,14 +178,10 @@
                     </datalist>
                     <span class="muted" style="font-size: 13px;">Escribe unas letras y te iremos sugiriendo cajas parecidas.</span>
                 </div>
-                <div class="field">
-                    <label for="store_id">Sucursal</label>
-                    <select id="store_id" name="store_id">
-                        <option value="">Todas las sucursales</option>
-                        @foreach ($storeOptions as $storeOption)
-                            <option value="{{ $storeOption->id }}" {{ (string) $storeFilter === (string) $storeOption->id ? 'selected' : '' }}>{{ $storeOption->name }}</option>
-                        @endforeach
-                    </select>
+                <div class="surface" style="align-content: center;">
+                    <small class="eyebrow">Contexto</small>
+                    <strong style="display:block; font-size: 18px; margin-bottom: 4px;">{{ $activeStore->name ?? 'Sucursal activa' }}</strong>
+                    <p>Cambia de sucursal desde la barra lateral si quieres revisar otra operacion.</p>
                 </div>
                 <div class="row-actions" style="grid-column: 1 / -1;">
                     <button class="button-secondary" type="submit">Aplicar filtros</button>

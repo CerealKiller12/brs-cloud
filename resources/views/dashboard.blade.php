@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Inicio | Venpi Cloud'])
+@extends('layouts.app', ['title' => 'Inicio de sucursal | Venpi Cloud'])
 
 @push('head')
 <style>
@@ -298,7 +298,7 @@
 
 <section class="dash-hero">
     <article class="dash-hero-main">
-        <small class="eyebrow">Centro de operacion</small>
+        <small class="eyebrow">Sucursal activa</small>
         <h1>{{ $store->name }}</h1>
         <p>{{ data_get(is_array($store->branding_json ?? null) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []), 'business_name', $tenant->name ?? 'Tu negocio') }}</p>
 

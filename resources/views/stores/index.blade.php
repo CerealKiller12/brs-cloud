@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'Sucursales | Venpi Cloud'])
+@extends('layouts.app', ['title' => (($pageMode ?? 'stores') === 'dashboard' ? 'Inicio' : 'Sucursales') . ' | Venpi Cloud'])
 
 @push('head')
 <style>
@@ -104,10 +104,16 @@
 @endpush
 
 @section('content')
+@php($isBusinessDashboard = ($pageMode ?? 'stores') === 'dashboard')
+
 <section class="hero">
-    <small>Sucursales</small>
-    <h2>Organiza como opera tu negocio</h2>
-    <p>Desde aqui defines tus sucursales, el nombre comercial que vera cada caja y la base con la que arrancan nuevos puntos de venta.</p>
+    <small>{{ $isBusinessDashboard ? 'Inicio del negocio' : 'Sucursales' }}</small>
+    <h2>{{ $isBusinessDashboard ? 'Asi va tu operacion completa' : 'Organiza como opera tu negocio' }}</h2>
+    <p>
+        {{ $isBusinessDashboard
+            ? 'Aqui ves el pulso general del negocio entre todas tus sucursales y administras donde opera cada caja, catalogo y acceso.'
+            : 'Desde aqui defines tus sucursales, el nombre comercial que vera cada caja y la base con la que arrancan nuevos puntos de venta.' }}
+    </p>
 </section>
 
 @if (session('status'))
@@ -146,12 +152,12 @@
         <article class="card store-editor">
             <div class="toolbar">
                 <div>
-                    <small class="eyebrow">Editor</small>
+                    <small class="eyebrow">{{ $isBusinessDashboard ? 'Sucursal nueva' : 'Editor' }}</small>
                     <h3>{{ $editStore ? 'Actualiza esta sucursal' : 'Crea una nueva sucursal' }}</h3>
                     <p>{{ $editStore ? 'Ajusta branding, zona horaria y acceso para las cajas que ya operan aqui.' : 'Prepara una nueva sucursal para que pueda recibir cajas y compartir catalogo.' }}</p>
                 </div>
                 @if ($editStore)
-                    <a class="pill" href="{{ route('stores.index') }}">Cancelar</a>
+                    <a class="pill" href="{{ $isBusinessDashboard ? route('dashboard') : route('stores.index') }}">Cancelar</a>
                 @endif
             </div>
 
@@ -202,9 +208,9 @@
         <article class="card">
             <div class="toolbar">
                 <div>
-                    <small class="eyebrow">Vista general</small>
-                    <h3>Asi se reparte tu operacion</h3>
-                    <p>Usa esta vista para ubicar rapido cual sucursal esta mas completa, cual va empezando y cual necesita mas cajas o productos.</p>
+                    <small class="eyebrow">{{ $isBusinessDashboard ? 'Vista del negocio' : 'Vista general' }}</small>
+                    <h3>{{ $isBusinessDashboard ? 'Tus sucursales, lado a lado' : 'Asi se reparte tu operacion' }}</h3>
+                    <p>{{ $isBusinessDashboard ? 'Compara rapido que sucursal va mas completa, cual necesita mas cajas y cual requiere atencion en catalogo u operacion.' : 'Usa esta vista para ubicar rapido cual sucursal esta mas completa, cual va empezando y cual necesita mas cajas o productos.' }}</p>
                 </div>
                 <span class="store-count-badge">{{ $stores->count() }} sucursal(es)</span>
             </div>
@@ -260,7 +266,7 @@
                         </div>
 
                         <div class="row-actions">
-                            <a class="button-secondary" href="{{ route('stores.index', ['edit' => $store->id]) }}">Editar</a>
+                            <a class="button-secondary" href="{{ $isBusinessDashboard ? route('dashboard', ['edit' => $store->id]) : route('stores.index', ['edit' => $store->id]) }}">Editar</a>
                             <form method="POST" action="{{ route('stores.rotate-key', $store->id) }}">
                                 @csrf
                                 <button class="button-secondary" type="submit">Renovar acceso de cajas</button>

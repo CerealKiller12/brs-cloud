@@ -159,9 +159,9 @@
 
 @section('content')
 <section class="hero">
-    <small>Actividad</small>
-    <h2>Todo lo que se esta moviendo en tu operacion</h2>
-    <p>Desde aqui puedes ver lo que envian tus cajas, detectar si algo se atoró y entender rapidamente que parte del negocio se esta moviendo mas.</p>
+    <small>Sucursal activa</small>
+    <h2>Actividad de {{ $activeStore->name ?? 'esta sucursal' }}</h2>
+    <p>Desde aqui ves lo que envian las cajas de esta sucursal, detectas si algo se atoró y entiendes rapidamente que se esta moviendo mas.</p>
 </section>
 
 <section class="metrics-grid">
@@ -192,20 +192,17 @@
         <article class="card activity-filter-card">
             <div class="toolbar">
                 <div>
-                    <small class="eyebrow">Explorador</small>
+                    <small class="eyebrow">Sucursal activa</small>
                     <h3>Filtra la actividad que quieres revisar</h3>
-                    <p>Puedes enfocarte por sucursal, caja o por el tipo de movimiento que te interesa inspeccionar.</p>
+                    <p>Estas revisando <strong>{{ $activeStore->name ?? 'la sucursal activa' }}</strong>. Filtra por caja o por el tipo de movimiento que te interesa inspeccionar.</p>
                 </div>
             </div>
 
             <form method="GET" action="{{ route('sync.index') }}" class="grid grid-2">
-                <div class="field">
-                    <label for="store_id">Sucursal</label>
-                    <select id="store_id" name="store_id">
-                        @foreach ($storeOptions as $option)
-                            <option value="{{ $option->id }}" {{ (int) $storeFilter === (int) $option->id ? 'selected' : '' }}>{{ $option->name }}</option>
-                        @endforeach
-                    </select>
+                <div class="surface" style="align-content: center;">
+                    <small class="eyebrow">Contexto</small>
+                    <strong style="display:block; font-size: 18px; margin-bottom: 4px;">{{ $activeStore->name ?? 'Sucursal activa' }}</strong>
+                    <p>Cambia de sucursal desde la barra lateral si quieres inspeccionar otra operacion.</p>
                 </div>
                 <div class="field">
                     <label for="device_id">Caja</label>

@@ -659,12 +659,20 @@
             @endif
 
             <div class="nav-section">
-                <span>Operacion</span>
-                <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">Inicio</a>
-                <a class="nav-link {{ request()->routeIs('stores.index') ? 'active' : '' }}" href="{{ route('stores.index') }}">Sucursales</a>
+                <span>Tu operacion en la nube</span>
+                <a class="nav-link {{ request()->routeIs('dashboard', 'stores.index') ? 'active' : '' }}" href="{{ route('dashboard') }}">Inicio</a>
+            </div>
+
+            <div class="nav-section">
+                <span>Sucursal activa</span>
+                <a class="nav-link {{ request()->routeIs('store.dashboard') ? 'active' : '' }}" href="{{ route('store.dashboard') }}">Inicio</a>
                 <a class="nav-link {{ request()->routeIs('devices.index') ? 'active' : '' }}" href="{{ route('devices.index') }}">Cajas</a>
                 <a class="nav-link {{ request()->routeIs('catalog.index') ? 'active' : '' }}" href="{{ route('catalog.index') }}">Catalogo compartido</a>
                 <a class="nav-link {{ request()->routeIs('sync.index') ? 'active' : '' }}" href="{{ route('sync.index') }}">Actividad</a>
+            </div>
+
+            <div class="nav-section">
+                <span>Cuenta</span>
                 <a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.index') }}">Cuenta</a>
             </div>
 
@@ -681,8 +689,8 @@
                     </svg>
                 </button>
                 <div class="mobile-topbar__title">
-                    <strong>{{ $cloudActiveStore->name ?? (auth()->user()->tenant?->name ?? 'Venpi Cloud') }}</strong>
-                    <span>{{ $cloudActiveStore->code ?? 'Operacion' }}</span>
+                    <strong>{{ request()->routeIs('dashboard', 'stores.index') ? (auth()->user()->tenant?->name ?? 'Venpi Cloud') : ($cloudActiveStore->name ?? (auth()->user()->tenant?->name ?? 'Venpi Cloud')) }}</strong>
+                    <span>{{ request()->routeIs('dashboard', 'stores.index') ? 'Negocio completo' : ($cloudActiveStore->code ?? 'Operacion') }}</span>
                 </div>
             </div>
             @yield('content')
