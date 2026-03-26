@@ -246,9 +246,20 @@
     .money-value {
         font-variant-numeric: tabular-nums;
     }
+    @media (max-width: 1220px) {
+        .dash-grid-2 {
+            grid-template-columns: 1fr;
+        }
+        .chart-wrap {
+            min-height: 260px;
+        }
+        .chart-wrap.small,
+        .chart-wrap.compact {
+            min-height: 220px;
+        }
+    }
     @media (max-width: 1280px) {
         .dash-hero,
-        .dash-grid-2,
         .kpi-grid,
         .dash-grid-3,
         .mini-metrics {
