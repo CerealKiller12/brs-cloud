@@ -103,6 +103,13 @@
         border: 1px solid var(--line);
         background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246,250,253,.98) 100%);
     }
+    .dash-hero > *,
+    .dash-grid > *,
+    .kpi-grid > *,
+    .kpi-grid-4 > *,
+    .mini-metrics > * {
+        min-width: 0;
+    }
     .kpi-card .stat-value {
         font-size: 34px;
         margin-bottom: 4px;
@@ -114,12 +121,18 @@
     .chart-wrap {
         position: relative;
         min-height: 300px;
+        min-width: 0;
     }
     .chart-wrap.small {
         min-height: 250px;
     }
     .chart-wrap.compact {
         min-height: 220px;
+    }
+    .chart-wrap canvas {
+        width: 100% !important;
+        max-width: 100%;
+        height: 100% !important;
     }
     .mini-metrics {
         display: grid;
@@ -247,18 +260,41 @@
     .context-card .pill {
         width: fit-content;
     }
+    .scope-strip {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .scope-card {
+        padding: 18px 20px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: var(--panel-soft);
+        display: grid;
+        gap: 8px;
+    }
+    .scope-card strong {
+        font-size: 18px;
+    }
+    .scope-card p {
+        color: var(--muted);
+        line-height: 1.6;
+    }
     .money-value {
         font-variant-numeric: tabular-nums;
     }
     @media (max-width: 1280px) {
         .dash-hero,
-        .dash-grid-2,
         .dash-grid-split,
-        .kpi-grid,
         .kpi-grid-4,
-        .dash-grid-3,
-        .mini-metrics {
+        .mini-metrics,
+        .scope-strip {
             grid-template-columns: 1fr 1fr;
+        }
+        .dash-grid-2,
+        .dash-grid-3,
+        .kpi-grid {
+            grid-template-columns: 1fr;
         }
     }
     @media (max-width: 820px) {
@@ -268,7 +304,8 @@
         .kpi-grid,
         .kpi-grid-4,
         .dash-grid-3,
-        .mini-metrics {
+        .mini-metrics,
+        .scope-strip {
             grid-template-columns: 1fr;
         }
         .dash-hero-main h1 {
@@ -292,6 +329,19 @@
 @if (session('status'))
 <section class="notice success">{{ session('status') }}</section>
 @endif
+
+<section class="scope-strip">
+    <article class="scope-card">
+        <small class="eyebrow">Vista del negocio</small>
+        <strong>Lo global junta todas tus sucursales</strong>
+        <p>Estas métricas y gráficas te muestran el total del negocio para leer ventas, cajas activas y alertas sin depender de una sola sucursal.</p>
+    </article>
+    <article class="scope-card">
+        <small class="eyebrow">Vista de sucursal</small>
+        <strong>Lo operativo baja a la sucursal activa</strong>
+        <p>Los bloques marcados como sucursal activa respetan el selector del lateral y sirven para revisar rendimiento, actividad e inventario de esa sede.</p>
+    </article>
+</section>
 
 <section class="dash-hero">
     <article class="dash-hero-main">
