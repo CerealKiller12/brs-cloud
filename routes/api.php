@@ -506,6 +506,160 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
     ];
 };
 
+$resolveCloudSaleOccurredAt = function (object $event, array $payload) {
+    try {
+        return !empty($payload['createdAt'])
+            ? Carbon::parse($payload['createdAt'])
+            : (!empty($event->occurred_at)
+                ? Carbon::parse($event->occurred_at)
+                : Carbon::parse($event->received_at));
+    } catch (\Throwable) {
+        return Carbon::parse($event->received_at);
+    }
+};
+
+$buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string $search = null) use ($resolveCloudSaleOccurredAt) {
+    $deviceMetaById = Device::query()
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->get(['device_id', 'name', 'platform'])
+        ->keyBy('device_id');
+
+    $normalizedSearch = $search ? mb_strtolower(trim($search)) : '';
+
+    $items = DB::table('sync_events')
+        ->select(['event_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->where('event_type', 'sale.created')
+        ->orderByDesc('received_at')
+        ->limit(500)
+        ->get()
+        ->map(function ($event) use ($deviceMetaById, $resolveCloudSaleOccurredAt) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $payments = $payload['payments'] ?? data_get($payload, 'sale.payments', []);
+            $occurredAt = $resolveCloudSaleOccurredAt($event, $payload);
+            $device = $deviceMetaById->get($event->device_id);
+            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+            $saleId = (string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $event->event_id));
+            $cashierName = trim((string) ($payload['cashierName'] ?? data_get($payload, 'sale.cashierName', $device?->name ?: $event->device_id)));
+
+            return [
+                'id' => $saleId,
+                'folio' => (string) ($payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
+                'paymentMethod' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                'totalCents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                'createdAt' => $occurredAt->toIso8601String(),
+                'syncedAt' => !empty($event->received_at) ? Carbon::parse($event->received_at)->toIso8601String() : null,
+                'cashierName' => $cashierName !== '' ? $cashierName : ($device?->name ?: $event->device_id),
+                'itemsCount' => is_array($items) ? count($items) : 0,
+                'payments' => [
+                    'cashCents' => (int) ($payments['cashCents'] ?? $payload['cashAmountCents'] ?? data_get($payload, 'sale.cashAmountCents', 0)),
+                    'cardCents' => (int) ($payments['cardCents'] ?? $payload['cardAmountCents'] ?? data_get($payload, 'sale.cardAmountCents', 0)),
+                    'transferCents' => (int) ($payments['transferCents'] ?? $payload['transferAmountCents'] ?? data_get($payload, 'sale.transferAmountCents', 0)),
+                ],
+                'cashReceivedCents' => (int) ($payload['cashReceivedCents'] ?? data_get($payload, 'sale.cashReceivedCents', 0)),
+                'changeDueCents' => (int) ($payload['changeDueCents'] ?? data_get($payload, 'sale.changeDueCents', 0)),
+            ];
+        })
+        ->filter(function (array $sale) use ($normalizedSearch) {
+            if ($normalizedSearch === '') {
+                return true;
+            }
+
+            $haystacks = [
+                mb_strtolower((string) $sale['folio']),
+                mb_strtolower((string) $sale['cashierName']),
+                mb_strtolower((string) $sale['paymentMethod']),
+            ];
+
+            foreach ($haystacks as $value) {
+                if (str_contains($value, $normalizedSearch)) {
+                    return true;
+                }
+            }
+
+            return false;
+        })
+        ->take(100)
+        ->values()
+        ->all();
+
+    return [
+        'items' => $items,
+    ];
+};
+
+$buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $saleId) use ($resolveCloudSaleOccurredAt) {
+    $deviceMetaById = Device::query()
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->get(['device_id', 'name', 'platform'])
+        ->keyBy('device_id');
+
+    $event = DB::table('sync_events')
+        ->select(['event_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->where('event_type', 'sale.created')
+        ->orderByDesc('received_at')
+        ->limit(500)
+        ->get()
+        ->first(function ($row) use ($saleId) {
+            $payload = json_decode($row->payload_json, true) ?: [];
+            $payloadSaleId = (string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $row->event_id));
+
+            return $payloadSaleId === $saleId;
+        });
+
+    abort_unless($event, 404, 'No pude encontrar ese ticket en Venpi Cloud.');
+
+    $payload = json_decode($event->payload_json, true) ?: [];
+    $payments = $payload['payments'] ?? data_get($payload, 'sale.payments', []);
+    $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
+    $occurredAt = $resolveCloudSaleOccurredAt($event, $payload);
+    $device = $deviceMetaById->get($event->device_id);
+
+    $detailItems = collect(is_array($items) ? $items : [])
+        ->values()
+        ->map(function (array $item, int $index) use ($saleId) {
+            return [
+                'id' => (string) ($item['id'] ?? "{$saleId}-item-".($index + 1)),
+                'productId' => (string) ($item['productId'] ?? $item['productSku'] ?? "item-{$index}"),
+                'productName' => (string) ($item['productName'] ?? $item['name'] ?? $item['productSku'] ?? 'Producto'),
+                'productSku' => (string) ($item['productSku'] ?? $item['sku'] ?? ''),
+                'quantity' => (int) round($item['quantity'] ?? 0),
+                'unitPriceCents' => (int) ($item['unitPriceCents'] ?? $item['unit_price_cents'] ?? 0),
+                'discountCents' => (int) ($item['discountCents'] ?? $item['discount_cents'] ?? 0),
+                'totalCents' => (int) ($item['totalCents'] ?? $item['total_cents'] ?? 0),
+            ];
+        })
+        ->all();
+
+    return [
+        'id' => $saleId,
+        'folio' => (string) ($payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
+        'cashierId' => (string) ($payload['cashierId'] ?? data_get($payload, 'sale.cashierId', $event->device_id)),
+        'cashierName' => (string) ($payload['cashierName'] ?? data_get($payload, 'sale.cashierName', $device?->name ?: $event->device_id)),
+        'paymentMethod' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+        'subtotalCents' => (int) ($payload['subtotalCents'] ?? data_get($payload, 'sale.subtotalCents', collect($detailItems)->sum('totalCents'))),
+        'discountCents' => (int) ($payload['discountCents'] ?? data_get($payload, 'sale.discountCents', 0)),
+        'taxCents' => (int) ($payload['taxCents'] ?? data_get($payload, 'sale.taxCents', 0)),
+        'totalCents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', collect($detailItems)->sum('totalCents'))),
+        'status' => (string) ($payload['status'] ?? data_get($payload, 'sale.status', 'completed')),
+        'createdAt' => $occurredAt->toIso8601String(),
+        'syncedAt' => !empty($event->received_at) ? Carbon::parse($event->received_at)->toIso8601String() : null,
+        'payments' => [
+            'cashCents' => (int) ($payments['cashCents'] ?? $payload['cashAmountCents'] ?? data_get($payload, 'sale.cashAmountCents', 0)),
+            'cardCents' => (int) ($payments['cardCents'] ?? $payload['cardAmountCents'] ?? data_get($payload, 'sale.cardAmountCents', 0)),
+            'transferCents' => (int) ($payments['transferCents'] ?? $payload['transferAmountCents'] ?? data_get($payload, 'sale.transferAmountCents', 0)),
+        ],
+        'cashReceivedCents' => (int) ($payload['cashReceivedCents'] ?? data_get($payload, 'sale.cashReceivedCents', 0)),
+        'changeDueCents' => (int) ($payload['changeDueCents'] ?? data_get($payload, 'sale.changeDueCents', 0)),
+        'items' => $detailItems,
+    ];
+};
+
 Route::post('/auth/login', function (Request $request) {
     $payload = $request->validate([
         'email' => ['required', 'email'],
@@ -619,6 +773,46 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/dashboard-summary', functio
     abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
 
     return response()->json($buildDashboardSummaryForStore((int) $user->tenant_id, (int) $storeId));
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/recent-sales', function (Request $request) use ($buildCloudRecentSalesForStore) {
+    /** @var User $user */
+    $requestUser = $request->user();
+    abort_unless($requestUser instanceof User && $requestUser->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+
+    $storeId = $request->integer('store_id') ?: $requestUser->store_id;
+    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar las ventas.');
+
+    $exists = DB::table('stores')
+        ->where('tenant_id', $requestUser->tenant_id)
+        ->where('id', $storeId)
+        ->exists();
+
+    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+
+    return response()->json(
+        $buildCloudRecentSalesForStore((int) $requestUser->tenant_id, (int) $storeId, $request->string('search')->toString())
+    );
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/sales/{saleId}', function (Request $request, string $saleId) use ($buildCloudSaleDetailForStore) {
+    /** @var User $user */
+    $requestUser = $request->user();
+    abort_unless($requestUser instanceof User && $requestUser->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+
+    $storeId = $request->integer('store_id') ?: $requestUser->store_id;
+    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar el ticket.');
+
+    $exists = DB::table('stores')
+        ->where('tenant_id', $requestUser->tenant_id)
+        ->where('id', $storeId)
+        ->exists();
+
+    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+
+    return response()->json(
+        $buildCloudSaleDetailForStore((int) $requestUser->tenant_id, (int) $storeId, $saleId)
+    );
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) {
