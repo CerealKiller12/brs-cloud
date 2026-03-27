@@ -394,6 +394,12 @@
                                     <label for="reorder_point">Punto de reorden</label>
                                     <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', 0) }}" required>
                                 </div>
+                                <div class="field catalog-field-span">
+                                    <label for="modifiers_text">Modificadores</label>
+                                    <textarea id="modifiers_text" name="modifiers_text" rows="4" placeholder="Extra queso|10
+Leche de almendra|12.50">{{ old('modifiers_text') }}</textarea>
+                                    <span class="muted" style="font-size: 13px;">Escribe uno por linea. Usa <code>Nombre|costo extra</code> cuando aplique.</span>
+                                </div>
                             </div>
                         </div>
 
@@ -505,6 +511,8 @@
                     @php($inlineFormId = 'quick-edit-'.$item->id)
                     @php($priceValue = number_format($item->price_cents / 100, 2, '.', ''))
                     @php($costValue = $item->cost_cents ? number_format($item->cost_cents / 100, 2, '.', '') : '')
+                    @php($modifiers = collect($item->modifiers ?? []))
+                    @php($modifiersText = $modifiers->map(fn ($modifier) => trim((string) ($modifier['name'] ?? '')).(((int) ($modifier['priceDeltaCents'] ?? 0)) > 0 ? '|'.number_format(((int) ($modifier['priceDeltaCents'] ?? 0)) / 100, 2, '.', '') : ''))->filter()->implode("\n"))
                     <tr
                         class="catalog-row"
                         data-catalog-row
@@ -519,7 +527,8 @@
                         data-stock="{{ $item->stock_on_hand }}"
                         data-reorder="{{ $item->reorder_point }}"
                         data-track="{{ $item->track_inventory ? 1 : 0 }}"
-                        data-active="{{ $item->is_active ? 1 : 0 }}">
+                        data-active="{{ $item->is_active ? 1 : 0 }}"
+                        data-modifiers-text='@json($modifiersText)'>
                         <td>
                             <input
                                 class="catalog-inline-input"
@@ -531,6 +540,12 @@
                             <div class="catalog-meta">
                                 <span class="muted">{{ $item->sku }}{{ $item->barcode ? ' · '.$item->barcode : '' }}</span>
                             </div>
+                            @if ($modifiers->isNotEmpty())
+                                <div class="catalog-meta">
+                                    <span class="pill">{{ $modifiers->count() }} modificador(es)</span>
+                                    <span class="muted">{{ $modifiers->take(2)->map(fn ($modifier) => trim((string) ($modifier['name'] ?? '')).(((int) ($modifier['priceDeltaCents'] ?? 0)) > 0 ? ' (+MX$'.number_format(((int) ($modifier['priceDeltaCents'] ?? 0)) / 100, 2).')' : ''))->implode(' · ') }}</span>
+                                </div>
+                            @endif
                         </td>
                         <td>
                             <input
@@ -663,6 +678,12 @@
                 <label for="modal_reorder_point">Punto de reorden</label>
                 <input id="modal_reorder_point" name="reorder_point" type="number" min="0" required>
             </div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label for="modal_modifiers_text">Modificadores</label>
+                <textarea id="modal_modifiers_text" name="modifiers_text" rows="4" placeholder="Extra queso|10
+Leche de almendra|12.50"></textarea>
+                <span class="muted" style="font-size: 13px;">Escribe uno por linea. Usa <code>Nombre|costo extra</code> cuando aplique.</span>
+            </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <input id="modal_track_inventory" name="track_inventory" type="checkbox" value="1" style="width: auto;">
                 <label for="modal_track_inventory" style="margin: 0;">Controlar inventario desde la nube</label>
@@ -787,6 +808,7 @@
         modalForm.querySelector('[name="cost"]').value = row.dataset.cost || '';
         modalForm.querySelector('[name="stock_on_hand"]').value = row.dataset.stock || '';
         modalForm.querySelector('[name="reorder_point"]').value = row.dataset.reorder || '';
+        modalForm.querySelector('[name="modifiers_text"]').value = row.dataset.modifiersText ? JSON.parse(row.dataset.modifiersText) : '';
         modalForm.querySelector('[name="track_inventory"]').checked = row.dataset.track === '1';
         modalForm.querySelector('[name="is_active"]').checked = row.dataset.active === '1';
 

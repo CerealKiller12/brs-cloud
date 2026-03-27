@@ -223,6 +223,78 @@ $resolveStoreContext = function (Request $request) {
     return $store;
 };
 
+$normalizeProductModifiers = function ($value) {
+    if (!is_array($value)) {
+        return [];
+    }
+
+    return collect($value)
+        ->map(function ($modifier) {
+            if (!is_array($modifier)) {
+                return null;
+            }
+
+            $name = trim((string) ($modifier['name'] ?? ''));
+
+            if ($name === '') {
+                return null;
+            }
+
+            $id = trim((string) ($modifier['id'] ?? ''));
+
+            if (array_key_exists('priceDeltaCents', $modifier)) {
+                $priceDeltaCents = (int) round($modifier['priceDeltaCents']);
+            } elseif (array_key_exists('price_delta_cents', $modifier)) {
+                $priceDeltaCents = (int) round($modifier['price_delta_cents']);
+            } else {
+                $priceDeltaCents = (int) round(((float) ($modifier['priceDelta'] ?? $modifier['price_delta'] ?? 0)) * 100);
+            }
+
+            return [
+                'id' => $id !== '' ? $id : 'modifier-'.bin2hex(random_bytes(4)),
+                'name' => $name,
+                'priceDeltaCents' => max(0, $priceDeltaCents),
+            ];
+        })
+        ->filter()
+        ->values()
+        ->all();
+};
+
+$catalogProductModifiers = function ($metadataJson) use ($normalizeProductModifiers) {
+    if (!is_string($metadataJson) || trim($metadataJson) === '') {
+        return [];
+    }
+
+    $metadata = json_decode($metadataJson, true);
+
+    if (!is_array($metadata)) {
+        return [];
+    }
+
+    return $normalizeProductModifiers($metadata['modifiers'] ?? []);
+};
+
+$buildCatalogProductMetadata = function ($metadataJson, $modifiers, array $extra = []) use ($catalogProductModifiers, $normalizeProductModifiers) {
+    $metadata = [];
+
+    if (is_string($metadataJson) && trim($metadataJson) !== '') {
+        $decoded = json_decode($metadataJson, true);
+
+        if (is_array($decoded)) {
+            $metadata = $decoded;
+        }
+    }
+
+    foreach ($extra as $key => $value) {
+        $metadata[$key] = $value;
+    }
+
+    $metadata['modifiers'] = $normalizeProductModifiers($modifiers);
+
+    return json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+};
+
 $issueDeviceTokenForStore = function (object $store, array $payload, Request $request) {
     $now = now();
 
@@ -591,7 +663,7 @@ $buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string 
     ];
 };
 
-$buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $saleId) use ($resolveCloudSaleOccurredAt) {
+$buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $saleId) use ($resolveCloudSaleOccurredAt, $normalizeProductModifiers) {
     $deviceMetaById = Device::query()
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
@@ -633,6 +705,7 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
                 'unitPriceCents' => (int) ($item['unitPriceCents'] ?? $item['unit_price_cents'] ?? 0),
                 'discountCents' => (int) ($item['discountCents'] ?? $item['discount_cents'] ?? 0),
                 'totalCents' => (int) ($item['totalCents'] ?? $item['total_cents'] ?? 0),
+                'modifiers' => $normalizeProductModifiers($item['modifiers'] ?? []),
             ];
         })
         ->all();
@@ -1013,7 +1086,7 @@ Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatf
     ]);
 })->middleware('auth:sanctum');
 
-Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreContext) {
+Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreContext, $catalogProductModifiers) {
     $store = $resolveStoreContext($request);
 
     $products = DB::table('cloud_catalog_products')
@@ -1031,6 +1104,7 @@ Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreConte
             'track_inventory',
             'catalog_version',
             'updated_at',
+            'metadata_json',
         ]);
 
     return response()->json([
@@ -1049,11 +1123,12 @@ Route::get('/cloud/catalog', function (Request $request) use ($resolveStoreConte
             'trackInventory' => (bool) $product->track_inventory,
             'catalogVersion' => $product->catalog_version,
             'updatedAt' => $product->updated_at,
+            'modifiers' => $catalogProductModifiers($product->metadata_json ?? null),
         ])->values(),
     ]);
 })->middleware('auth:sanctum');
 
-Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveStoreContext) {
+Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveStoreContext, $catalogProductModifiers) {
     $payload = $request->validate([
         'since_version' => ['required', 'integer', 'min:0'],
     ]);
@@ -1078,6 +1153,7 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
             'track_inventory',
             'catalog_version',
             'updated_at',
+            'metadata_json',
         ]);
 
     $deletes = DB::table('cloud_catalog_tombstones')
@@ -1108,6 +1184,7 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
             'trackInventory' => (bool) $product->track_inventory,
             'catalogVersion' => $product->catalog_version,
             'updatedAt' => $product->updated_at,
+            'modifiers' => $catalogProductModifiers($product->metadata_json ?? null),
         ])->values(),
         'deletes' => $deletes->map(fn (object $delete) => [
             'sku' => $delete->sku,
@@ -1128,7 +1205,7 @@ Route::get('/cloud/events/stream', function (Request $request) use ($resolveStor
     );
 });
 
-Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext) {
+Route::post('/cloud/sync/events', function (Request $request) use ($resolveStoreContext, $buildCatalogProductMetadata) {
     $payload = $request->validate([
         'device_id' => ['required', 'string', 'max:120'],
         'events' => ['required', 'array', 'min:1'],
@@ -1268,11 +1345,15 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                         'track_inventory' => (bool) ($eventPayload['trackInventory'] ?? true),
                         'is_active' => true,
                         'catalog_version' => $catalogVersion,
-                        'metadata_json' => json_encode([
-                            'source' => 'sync-event',
-                            'last_event_type' => $event['event_type'],
-                            'last_device_id' => $payload['device_id'],
-                        ]),
+                        'metadata_json' => $buildCatalogProductMetadata(
+                            $existingProduct->metadata_json ?? null,
+                            $eventPayload['modifiers'] ?? [],
+                            [
+                                'source' => 'sync-event',
+                                'last_event_type' => $event['event_type'],
+                                'last_device_id' => $payload['device_id'],
+                            ],
+                        ),
                         'updated_at' => now(),
                     ];
 

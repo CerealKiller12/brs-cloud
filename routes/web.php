@@ -40,6 +40,107 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
     return $activeStore;
 };
 
+$normalizeCatalogModifiers = function ($value) {
+    if (!is_array($value)) {
+        return [];
+    }
+
+    return collect($value)
+        ->map(function ($modifier) {
+            if (!is_array($modifier)) {
+                return null;
+            }
+
+            $name = trim((string) ($modifier['name'] ?? ''));
+
+            if ($name === '') {
+                return null;
+            }
+
+            $id = trim((string) ($modifier['id'] ?? ''));
+
+            if (array_key_exists('priceDeltaCents', $modifier)) {
+                $priceDeltaCents = (int) round($modifier['priceDeltaCents']);
+            } elseif (array_key_exists('price_delta_cents', $modifier)) {
+                $priceDeltaCents = (int) round($modifier['price_delta_cents']);
+            } else {
+                $priceDeltaCents = (int) round(((float) ($modifier['priceDelta'] ?? $modifier['price_delta'] ?? 0)) * 100);
+            }
+
+            return [
+                'id' => $id !== '' ? $id : 'modifier-'.Str::lower(Str::random(10)),
+                'name' => $name,
+                'priceDeltaCents' => max(0, $priceDeltaCents),
+            ];
+        })
+        ->filter()
+        ->values()
+        ->all();
+};
+
+$parseCatalogModifiersText = function (?string $text) use ($normalizeCatalogModifiers) {
+    if (!is_string($text) || trim($text) === '') {
+        return [];
+    }
+
+    $rows = preg_split('/\r\n|\r|\n/', $text) ?: [];
+
+    return $normalizeCatalogModifiers(collect($rows)
+        ->map(function (string $row) {
+            $line = trim($row);
+
+            if ($line === '') {
+                return null;
+            }
+
+            [$name, $price] = array_pad(explode('|', $line, 2), 2, null);
+
+            return [
+                'name' => trim((string) $name),
+                'priceDelta' => $price !== null ? (float) trim((string) $price) : 0,
+            ];
+        })
+        ->filter()
+        ->values()
+        ->all());
+};
+
+$catalogProductModifiers = function ($product) use ($normalizeCatalogModifiers) {
+    $metadataJson = is_object($product) ? ($product->metadata_json ?? null) : null;
+
+    if (!is_string($metadataJson) || trim($metadataJson) === '') {
+        return [];
+    }
+
+    $metadata = json_decode($metadataJson, true);
+
+    if (!is_array($metadata)) {
+        return [];
+    }
+
+    return $normalizeCatalogModifiers($metadata['modifiers'] ?? []);
+};
+
+$buildCatalogProductMetadata = function ($metadataJson, $modifiers, array $extra = []) use ($normalizeCatalogModifiers) {
+    $metadata = [];
+
+    if (is_string($metadataJson) && trim($metadataJson) !== '') {
+        $decoded = json_decode($metadataJson, true);
+
+        if (is_array($decoded)) {
+            $metadata = $decoded;
+        }
+    }
+
+    foreach ($extra as $key => $value) {
+        $metadata[$key] = $value;
+    }
+
+    $metadata['modifiers'] = $normalizeCatalogModifiers($modifiers);
+
+    return json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+};
+
 $buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext) {
     $editId = $request->integer('edit');
     $tenantId = $user->tenant_id;
@@ -1086,7 +1187,7 @@ if ($adminHost !== '') {
         ->group($registerAdminRoutes);
 }
 
-Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets) {
+Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets, $catalogProductModifiers, $parseCatalogModifiersText, $buildCatalogProductMetadata) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
@@ -1861,7 +1962,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return view('sync.index', compact('events', 'deviceOptions', 'deviceFilter', 'eventFilter', 'eventTypeOptions', 'storeFilter', 'storeOptions', 'syncStats', 'topEventTypes', 'activeStore'));
     })->name('sync.index');
 
-    Route::get('/catalog', function (Request $request) use ($resolveStoreForUser) {
+    Route::get('/catalog', function (Request $request) use ($resolveStoreForUser, $catalogProductModifiers) {
         /** @var User $user */
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
@@ -1880,6 +1981,12 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->orderBy('name');
 
         $catalog = $catalogQuery->paginate(20)->withQueryString();
+        $catalog->getCollection()->transform(function ($item) use ($catalogProductModifiers) {
+            $item->modifiers = $catalogProductModifiers($item);
+
+            return $item;
+        });
+
         $catalogStats = [
             'total' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->count(),
             'active' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->where('is_active', true)->count(),
@@ -1934,7 +2041,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         );
     })->name('catalog.events');
 
-    Route::post('/catalog', function (Request $request) use ($bumpCatalogVersion, $resolveStoreForUser) {
+    Route::post('/catalog', function (Request $request) use ($bumpCatalogVersion, $resolveStoreForUser, $parseCatalogModifiersText, $buildCatalogProductMetadata) {
         /** @var User $user */
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
@@ -1948,9 +2055,11 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'stock_on_hand' => ['required', 'integer', 'min:0'],
             'reorder_point' => ['required', 'integer', 'min:0'],
             'track_inventory' => ['nullable', 'boolean'],
+            'modifiers_text' => ['nullable', 'string', 'max:4000'],
         ]);
 
         $nextVersion = $bumpCatalogVersion($store->id);
+        $modifiers = $parseCatalogModifiersText($request->input('modifiers_text', ''));
 
         DB::table('cloud_catalog_products')->insert([
             'store_id' => $store->id,
@@ -1964,6 +2073,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'track_inventory' => (bool) ($payload['track_inventory'] ?? false),
             'is_active' => true,
             'catalog_version' => $nextVersion,
+            'metadata_json' => $buildCatalogProductMetadata(null, $modifiers, ['source' => 'cloud-web']),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -1971,7 +2081,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return redirect()->route('catalog.index')->with('status', 'Producto agregado al catalogo compartido.');
     })->name('catalog.store');
 
-    Route::put('/catalog/{productId}', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
+    Route::put('/catalog/{productId}', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser, $parseCatalogModifiersText, $catalogProductModifiers, $buildCatalogProductMetadata) {
         /** @var User $user */
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
@@ -1991,9 +2101,13 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'reorder_point' => ['required', 'integer', 'min:0'],
             'track_inventory' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'modifiers_text' => ['nullable', 'string', 'max:4000'],
         ]);
 
         $nextVersion = $bumpCatalogVersion($store->id);
+        $modifiers = $request->has('modifiers_text')
+            ? $parseCatalogModifiersText($request->input('modifiers_text', ''))
+            : $catalogProductModifiers($product);
 
         if ($product->sku !== $payload['sku'] || (($product->barcode ?? null) !== ($payload['barcode'] ?: null))) {
             DB::table('cloud_catalog_tombstones')->insert([
@@ -2020,6 +2134,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 'track_inventory' => (bool) ($payload['track_inventory'] ?? false),
                 'is_active' => (bool) ($payload['is_active'] ?? false),
                 'catalog_version' => $nextVersion,
+                'metadata_json' => $buildCatalogProductMetadata($product->metadata_json ?? null, $modifiers, ['source' => 'cloud-web']),
                 'updated_at' => now(),
             ]);
 
