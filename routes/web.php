@@ -40,14 +40,16 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
     return $activeStore;
 };
 
-$buildBusinessDashboardData = function (User $user, Request $request) {
+$buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext) {
     $editId = $request->integer('edit');
     $tenantId = $user->tenant_id;
-    $now = now();
-    $todayStart = now()->copy()->startOfDay();
+    [$activeStore] = $buildStoreContext($user);
+    $storeTimezone = trim((string) ($activeStore->timezone ?? '')) ?: 'America/Tijuana';
+    $now = now($storeTimezone);
+    $todayStart = $now->copy()->startOfDay();
     $yesterdayStart = $todayStart->copy()->subDay();
-    $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
-    $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
+    $sevenDaysAgo = $now->copy()->subDays(6)->startOfDay();
+    $thirtyDaysAgoUtc = $now->copy()->subDays(29)->startOfDay()->utc();
 
     $stores = Store::query()
         ->where('tenant_id', $user->tenant_id)
@@ -95,20 +97,20 @@ $buildBusinessDashboardData = function (User $user, Request $request) {
         ->select(['store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
         ->where('tenant_id', $tenantId)
         ->where('event_type', 'sale.created')
-        ->where('received_at', '>=', $thirtyDaysAgo)
+        ->where('received_at', '>=', $thirtyDaysAgoUtc)
         ->orderBy('received_at')
         ->get()
-        ->map(function ($event) {
+        ->map(function ($event) use ($storeTimezone) {
             $payload = json_decode($event->payload_json, true) ?: [];
 
             try {
                 $occurredAt = !empty($payload['createdAt'])
-                    ? \Carbon\Carbon::parse($payload['createdAt'])
+                    ? \Carbon\Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
                     : (!empty($event->occurred_at)
-                        ? \Carbon\Carbon::parse($event->occurred_at)
-                        : \Carbon\Carbon::parse($event->received_at));
+                        ? \Carbon\Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
+                        : \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone));
             } catch (\Throwable) {
-                $occurredAt = \Carbon\Carbon::parse($event->received_at);
+                $occurredAt = \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone);
             }
 
             $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
@@ -152,8 +154,8 @@ $buildBusinessDashboardData = function (User $user, Request $request) {
         $salesDeltaPercent = 100;
     }
 
-    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days) {
-        $day = now()->copy()->subDays($daysAgo);
+    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days, $now) {
+        $day = $now->copy()->subDays($daysAgo);
         $rows = $salesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
 
         return [
@@ -1273,11 +1275,12 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $tenantId = $user->tenant_id;
         $store = $resolveStoreForUser($user);
         $storeId = $store->id;
-        $now = now();
-        $todayStart = now()->copy()->startOfDay();
+        $storeTimezone = trim((string) ($store->timezone ?? '')) ?: 'America/Tijuana';
+        $now = now($storeTimezone);
+        $todayStart = $now->copy()->startOfDay();
         $yesterdayStart = $todayStart->copy()->subDay();
-        $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
-        $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
+        $sevenDaysAgo = $now->copy()->subDays(6)->startOfDay();
+        $thirtyDaysAgoUtc = $now->copy()->subDays(29)->startOfDay()->utc();
 
         $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
 
@@ -1292,20 +1295,20 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->where('tenant_id', $tenantId)
             ->where('store_id', $storeId)
             ->where('event_type', 'sale.created')
-            ->where('received_at', '>=', $thirtyDaysAgo)
+            ->where('received_at', '>=', $thirtyDaysAgoUtc)
             ->orderBy('received_at')
             ->get()
-            ->map(function ($event) {
+            ->map(function ($event) use ($storeTimezone) {
                 $payload = json_decode($event->payload_json, true) ?: [];
 
                 try {
                     $occurredAt = !empty($payload['createdAt'])
-                        ? \Carbon\Carbon::parse($payload['createdAt'])
+                        ? \Carbon\Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
                         : (!empty($event->occurred_at)
-                            ? \Carbon\Carbon::parse($event->occurred_at)
-                            : \Carbon\Carbon::parse($event->received_at));
+                            ? \Carbon\Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
+                            : \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone));
                 } catch (\Throwable) {
-                    $occurredAt = \Carbon\Carbon::parse($event->received_at);
+                    $occurredAt = \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone);
                 }
 
                 $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
@@ -1348,8 +1351,8 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             $salesDeltaPercent = 100;
         }
 
-        $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days) {
-            $day = now()->copy()->subDays($daysAgo);
+        $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days, $now) {
+            $day = $now->copy()->subDays($daysAgo);
             $rows = $salesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
 
             return [
