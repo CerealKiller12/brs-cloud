@@ -260,19 +260,20 @@ $issueDeviceTokenForStore = function (object $store, array $payload, Request $re
 };
 
 $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
-    $now = now();
-    $todayStart = now()->copy()->startOfDay();
-    $yesterdayStart = $todayStart->copy()->subDay();
-    $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
-    $thirtyDaysAgo = now()->copy()->subDays(29)->startOfDay();
-
     $store = DB::table('stores')
         ->where('tenant_id', $tenantId)
         ->where('id', $storeId)
-        ->select(['id', 'name', 'code', 'catalog_version'])
+        ->select(['id', 'name', 'code', 'catalog_version', 'timezone'])
         ->first();
 
     abort_unless($store, 404, 'No pude encontrar esa sucursal en Venpi Cloud.');
+
+    $storeTimezone = trim((string) ($store->timezone ?? '')) ?: 'America/Tijuana';
+    $now = now($storeTimezone);
+    $todayStart = $now->copy()->startOfDay();
+    $yesterdayStart = $todayStart->copy()->subDay();
+    $sevenDaysAgo = $now->copy()->subDays(6)->startOfDay();
+    $thirtyDaysAgoUtc = $now->copy()->subDays(29)->startOfDay()->utc();
 
     $deviceMetaById = Device::query()
         ->where('tenant_id', $tenantId)
@@ -285,20 +286,20 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
         ->where('event_type', 'sale.created')
-        ->where('received_at', '>=', $thirtyDaysAgo)
+        ->where('received_at', '>=', $thirtyDaysAgoUtc)
         ->orderBy('received_at')
         ->get()
-        ->map(function ($event) {
+        ->map(function ($event) use ($storeTimezone) {
             $payload = json_decode($event->payload_json, true) ?: [];
 
             try {
                 $occurredAt = !empty($payload['createdAt'])
-                    ? Carbon::parse($payload['createdAt'])
+                    ? Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
                     : (!empty($event->occurred_at)
-                        ? Carbon::parse($event->occurred_at)
-                        : Carbon::parse($event->received_at));
+                        ? Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
+                        : Carbon::parse($event->received_at)->setTimezone($storeTimezone));
             } catch (\Throwable) {
-                $occurredAt = Carbon::parse($event->received_at);
+                $occurredAt = Carbon::parse($event->received_at)->setTimezone($storeTimezone);
             }
 
             $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
@@ -339,8 +340,8 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
         $salesDeltaPercent = 100;
     }
 
-    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days) {
-        $day = now()->copy()->subDays($daysAgo);
+    $salesTimeline = collect(range(6, 0))->map(function (int $daysAgo) use ($salesLast7Days, $now) {
+        $day = $now->copy()->subDays($daysAgo);
         $rows = $salesLast7Days->filter(fn ($sale) => $sale->occurred_at->isSameDay($day));
 
         return [
