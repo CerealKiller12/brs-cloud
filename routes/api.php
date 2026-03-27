@@ -534,7 +534,7 @@ $buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string 
         ->where('store_id', $storeId)
         ->where('event_type', 'sale.created')
         ->orderByDesc('received_at')
-        ->limit(500)
+        ->limit(1000)
         ->get()
         ->map(function ($event) use ($deviceMetaById, $resolveCloudSaleOccurredAt) {
             $payload = json_decode($event->payload_json, true) ?: [];
@@ -582,7 +582,7 @@ $buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string 
 
             return false;
         })
-        ->take(100)
+        ->take(500)
         ->values()
         ->all();
 
@@ -604,7 +604,7 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
         ->where('store_id', $storeId)
         ->where('event_type', 'sale.created')
         ->orderByDesc('received_at')
-        ->limit(500)
+        ->limit(1000)
         ->get()
         ->first(function ($row) use ($saleId) {
             $payload = json_decode($row->payload_json, true) ?: [];
