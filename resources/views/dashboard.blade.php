@@ -791,19 +791,7 @@
                             boxWidth: 10,
                             color: '#486175',
                         }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => {
-                                if (context.dataset.label === 'Tickets') {
-                                    const value = Number(context.raw);
-                                    return `Tickets: ${hourlyMode === 'weeklyAverage' ? value.toFixed(1) : value}`;
-                                }
-
-                                return `Ingreso: ${money.format(Number(context.raw))}`;
-                            }
-                        }
-                    },
+                    }
                 },
                 scales: {
                     x: {
