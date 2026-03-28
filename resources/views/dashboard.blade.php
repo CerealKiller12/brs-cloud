@@ -502,15 +502,22 @@
         <div class="section-title">
             <div>
                 <small class="eyebrow">Horas fuertes</small>
-                <h3>En que momentos vende mas la sucursal hoy</h3>
+                <h3 id="hourlySalesHeading">En que momentos vende mas la sucursal hoy</h3>
             </div>
-            <p>
-                @if (($peakHour['tickets'] ?? 0) > 0)
-                    El pico de hoy va en {{ $peakHour['label'] }} con {{ $peakHour['tickets'] }} ticket(s).
+            <p id="hourlySalesSummary">
+                @if (($peakHourToday['tickets'] ?? 0) > 0)
+                    El pico de hoy va en {{ $peakHourToday['label'] }} con {{ $peakHourToday['tickets'] }} ticket(s).
                 @else
                     En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.
                 @endif
             </p>
+        </div>
+
+        <div class="toolbar" style="margin-bottom: 12px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="pill hourly-toggle is-active" data-mode="today">Hoy</button>
+                <button type="button" class="pill hourly-toggle" data-mode="weeklyAverage">Promedio semanal</button>
+            </div>
         </div>
 
         <div class="chart-wrap compact">
@@ -610,7 +617,22 @@
 
     const salesTimeline = @json($salesTimeline);
     const paymentMix = @json($paymentMix->map(fn ($row) => ['label' => $row->label, 'tickets' => (int) $row->tickets, 'amountCents' => (int) $row->amountCents])->values());
-    const hourlySales = @json($hourlySales);
+    const hourlySalesModes = {
+        today: {
+            heading: 'En que momentos vende mas la sucursal hoy',
+            summary: @json(($peakHourToday['tickets'] ?? 0) > 0
+                ? 'El pico de hoy va en '.$peakHourToday['label'].' con '.$peakHourToday['tickets'].' ticket(s).'
+                : 'En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.'),
+            points: @json($hourlySalesToday),
+        },
+        weeklyAverage: {
+            heading: 'Promedio semanal de horas fuertes',
+            summary: @json(($peakHourWeeklyAverage['tickets'] ?? 0) > 0
+                ? 'En la ultima semana, el promedio mas fuerte cae en '.$peakHourWeeklyAverage['label'].' con '.number_format((float) $peakHourWeeklyAverage['tickets'], 1).' ticket(s).'
+                : 'En cuanto haya mas ventas en la semana, aqui veras el promedio por hora.'),
+            points: @json($hourlySalesWeeklyAverage),
+        }
+    };
 
     const salesTimelineCanvas = document.getElementById('salesTimelineChart');
     if (salesTimelineCanvas) {
@@ -654,6 +676,18 @@
                             usePointStyle: true,
                             boxWidth: 10,
                             color: '#486175',
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                if (context.dataset.label === 'Tickets') {
+                                    const value = Number(context.raw);
+                                    return `Tickets: ${hourlyMode === 'weeklyAverage' ? value.toFixed(1) : value}`;
+                                }
+
+                                return `Ingreso: ${money.format(Number(context.raw))}`;
+                            }
                         }
                     }
                 },
@@ -718,14 +752,18 @@
 
     const hourlySalesCanvas = document.getElementById('hourlySalesChart');
     if (hourlySalesCanvas) {
-        new Chart(hourlySalesCanvas, {
+        const hourlyHeading = document.getElementById('hourlySalesHeading');
+        const hourlySummary = document.getElementById('hourlySalesSummary');
+        const hourlyToggleButtons = Array.from(document.querySelectorAll('.hourly-toggle'));
+        let hourlyMode = 'today';
+        const hourlyChart = new Chart(hourlySalesCanvas, {
             type: 'bar',
             data: {
-                labels: hourlySales.map((point) => point.label),
+                labels: hourlySalesModes[hourlyMode].points.map((point) => point.label),
                 datasets: [
                     {
                         label: 'Tickets',
-                        data: hourlySales.map((point) => point.tickets),
+                        data: hourlySalesModes[hourlyMode].points.map((point) => point.tickets),
                         backgroundColor: '#4e7598',
                         borderRadius: 10,
                         borderSkipped: false,
@@ -733,7 +771,7 @@
                     {
                         type: 'line',
                         label: 'Ingreso',
-                        data: hourlySales.map((point) => Math.round(point.amountCents / 100)),
+                        data: hourlySalesModes[hourlyMode].points.map((point) => Math.round(point.amountCents / 100)),
                         borderColor: '#d4b48d',
                         backgroundColor: 'rgba(212, 180, 141, .18)',
                         borderWidth: 3,
@@ -760,13 +798,18 @@
                         grid: { display: false },
                         ticks: {
                             color: '#6a7a8f',
-                            callback: (_, index) => index % 2 === 0 ? hourlySales[index].label : '',
+                            callback: (_, index) => index % 2 === 0 ? hourlySalesModes[hourlyMode].points[index]?.label ?? '' : '',
                         }
                     },
                     y: {
                         beginAtZero: true,
                         grid: { color: 'rgba(216, 224, 232, .65)' },
-                        ticks: { color: '#6a7a8f', precision: 0 }
+                        ticks: {
+                            color: '#6a7a8f',
+                            callback: (value) => hourlyMode === 'weeklyAverage'
+                                ? Number(value).toFixed(1)
+                                : Number(value).toFixed(0),
+                        }
                     },
                     y1: {
                         beginAtZero: true,
@@ -780,6 +823,36 @@
                 }
             }
         });
+
+        const applyHourlyMode = (mode) => {
+            hourlyMode = mode;
+            const config = hourlySalesModes[mode];
+            hourlyChart.data.labels = config.points.map((point) => point.label);
+            hourlyChart.data.datasets[0].data = config.points.map((point) => point.tickets);
+            hourlyChart.data.datasets[1].data = config.points.map((point) => Math.round(point.amountCents / 100));
+            hourlyChart.update();
+
+            if (hourlyHeading) {
+                hourlyHeading.textContent = config.heading;
+            }
+
+            if (hourlySummary) {
+                hourlySummary.textContent = config.summary;
+            }
+
+            hourlyToggleButtons.forEach((button) => {
+                const isActive = button.dataset.mode === mode;
+                button.classList.toggle('is-active', isActive);
+                button.style.background = isActive ? 'var(--soft)' : '';
+                button.style.color = isActive ? 'var(--text)' : '';
+            });
+        };
+
+        hourlyToggleButtons.forEach((button) => {
+            button.addEventListener('click', () => applyHourlyMode(button.dataset.mode || 'today'));
+        });
+
+        applyHourlyMode('today');
     }
 })();
 </script>
