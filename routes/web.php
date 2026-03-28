@@ -287,7 +287,7 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         ->filter(fn ($row) => $row->tickets > 0 || $row->amountCents > 0)
         ->values();
 
-    $hourlySalesToday = collect(range(0, 23))->map(function (int $hour) use ($salesTodayCollection) {
+    $hourlySales = collect(range(0, 23))->map(function (int $hour) use ($salesTodayCollection) {
         $rows = $salesTodayCollection->filter(fn ($sale) => (int) $sale->occurred_at->format('G') === $hour);
 
         return [
@@ -297,18 +297,7 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         ];
     })->values();
 
-    $hourlySalesWeeklyAverage = collect(range(0, 23))->map(function (int $hour) use ($salesLast7Days) {
-        $rows = $salesLast7Days->filter(fn ($sale) => (int) $sale->occurred_at->format('G') === $hour);
-
-        return [
-            'label' => str_pad((string) $hour, 2, '0', STR_PAD_LEFT).':00',
-            'tickets' => round($rows->count() / 7, 1),
-            'amountCents' => (int) round($rows->sum('total_cents') / 7),
-        ];
-    })->values();
-
-    $peakHourToday = collect($hourlySalesToday)->sortByDesc('tickets')->first();
-    $peakHourWeeklyAverage = collect($hourlySalesWeeklyAverage)->sortByDesc('tickets')->first();
+    $peakHour = collect($hourlySales)->sortByDesc('tickets')->first();
 
     $catalogProducts = $storeIds->isEmpty()
         ? collect()
@@ -466,10 +455,8 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         'paymentMix',
         'topProducts',
         'storeSales',
-        'hourlySalesToday',
-        'hourlySalesWeeklyAverage',
-        'peakHourToday',
-        'peakHourWeeklyAverage',
+        'hourlySales',
+        'peakHour',
         'lowStockProducts',
         'recentEvents',
         'nextSteps'
@@ -1497,7 +1484,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->filter(fn ($row) => $row->tickets > 0 || $row->amountCents > 0)
             ->values();
 
-        $hourlySalesToday = collect(range(0, 23))->map(function (int $hour) use ($salesTodayCollection) {
+        $hourlySales = collect(range(0, 23))->map(function (int $hour) use ($salesTodayCollection) {
             $rows = $salesTodayCollection->filter(fn ($sale) => (int) $sale->occurred_at->format('G') === $hour);
 
             return [
@@ -1507,18 +1494,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ];
         })->values();
 
-        $hourlySalesWeeklyAverage = collect(range(0, 23))->map(function (int $hour) use ($salesLast7Days) {
-            $rows = $salesLast7Days->filter(fn ($sale) => (int) $sale->occurred_at->format('G') === $hour);
-
-            return [
-                'label' => str_pad((string) $hour, 2, '0', STR_PAD_LEFT).':00',
-                'tickets' => round($rows->count() / 7, 1),
-                'amountCents' => (int) round($rows->sum('total_cents') / 7),
-            ];
-        })->values();
-
-        $peakHourToday = collect($hourlySalesToday)->sortByDesc('tickets')->first();
-        $peakHourWeeklyAverage = collect($hourlySalesWeeklyAverage)->sortByDesc('tickets')->first();
+        $peakHour = collect($hourlySales)->sortByDesc('tickets')->first();
 
         $catalogProducts = DB::table('cloud_catalog_products')
             ->where('store_id', $storeId)
@@ -1679,10 +1655,8 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'paymentMix',
             'topProducts',
             'deviceSales',
-            'hourlySalesToday',
-            'hourlySalesWeeklyAverage',
-            'peakHourToday',
-            'peakHourWeeklyAverage',
+            'hourlySales',
+            'peakHour',
             'lowStockProducts',
             'nextSteps'
         ));
