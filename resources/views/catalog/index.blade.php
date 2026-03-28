@@ -261,6 +261,30 @@
         border: 1px solid var(--line);
         background: var(--panel-soft);
     }
+    .catalog-modifier-list {
+        display: grid;
+        gap: 10px;
+    }
+    .catalog-modifier-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 150px 40px;
+        gap: 10px;
+        align-items: end;
+    }
+    .catalog-modifier-remove {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        border: 1px solid #e8c4bc;
+        background: #fff1ee;
+        color: #ae4c3b;
+        cursor: pointer;
+        font-size: 20px;
+        line-height: 1;
+    }
+    .catalog-modifier-add {
+        justify-self: start;
+    }
     .catalog-modal-head {
         display: flex;
         justify-content: space-between;
@@ -297,6 +321,9 @@
     }
     @media (max-width: 820px) {
         .catalog-editor-fields {
+            grid-template-columns: 1fr;
+        }
+        .catalog-modifier-row {
             grid-template-columns: 1fr;
         }
     }
@@ -403,10 +430,11 @@
                                     <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', 0) }}" required>
                                 </div>
                                 <div class="field catalog-field-span">
-                                    <label for="modifiers_text">Modificadores</label>
-                                    <textarea id="modifiers_text" name="modifiers_text" rows="4" placeholder="Extra queso|10
-Leche de almendra|12.50">{{ old('modifiers_text') }}</textarea>
-                                    <span class="muted" style="font-size: 13px;">Escribe uno por linea. Usa <code>Nombre|costo extra</code> cuando aplique.</span>
+                                    <label>Modificadores</label>
+                                    <input type="hidden" id="modifiers_text" name="modifiers_text" value="{{ old('modifiers_text') }}" data-modifier-hidden-input>
+                                    <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='@json(old('modifiers_text', ''))'></div>
+                                    <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                                    <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
                                 </div>
                             </div>
                         </div>
@@ -697,10 +725,11 @@ Leche de almendra|12.50">{{ old('modifiers_text') }}</textarea>
                 <input id="modal_reorder_point" name="reorder_point" type="number" min="0" required>
             </div>
             <div class="field" style="grid-column: 1 / -1;">
-                <label for="modal_modifiers_text">Modificadores</label>
-                <textarea id="modal_modifiers_text" name="modifiers_text" rows="4" placeholder="Extra queso|10
-Leche de almendra|12.50"></textarea>
-                <span class="muted" style="font-size: 13px;">Escribe uno por linea. Usa <code>Nombre|costo extra</code> cuando aplique.</span>
+                <label>Modificadores</label>
+                <input type="hidden" id="modal_modifiers_text" name="modifiers_text" value="" data-modifier-hidden-input>
+                <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='""'></div>
+                <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <input id="modal_track_inventory" name="track_inventory" type="checkbox" value="1" style="width: auto;">
@@ -780,6 +809,83 @@ Leche de almendra|12.50"></textarea>
     const transferForm = document.querySelector('[data-catalog-transfer-form]');
     const filterEmpty = root.querySelector('[data-catalog-filter-empty]');
     let source = null;
+
+    const modifierContainers = Array.from(document.querySelectorAll('[data-modifier-list]'));
+
+    const parseModifierText = (text) => String(text || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+            const [name, price = '0'] = line.split('|');
+            return {
+                name: String(name || '').trim(),
+                price: String(price || '0').trim(),
+            };
+        });
+
+    const syncModifierList = (list) => {
+        const wrapper = list.closest('.field') || list.parentElement;
+        const hidden = wrapper?.querySelector('[data-modifier-hidden-input]');
+        if (!hidden) {
+            return;
+        }
+
+        const lines = Array.from(list.querySelectorAll('[data-modifier-row]'))
+            .map((row) => {
+                const name = String(row.querySelector('[data-modifier-name]')?.value || '').trim();
+                const price = String(row.querySelector('[data-modifier-price]')?.value || '').trim();
+                if (!name) {
+                    return null;
+                }
+                const normalizedPrice = price === '' ? '0' : price;
+                return `${name}|${normalizedPrice}`;
+            })
+            .filter(Boolean);
+
+        hidden.value = lines.join('\n');
+    };
+
+    const createModifierRow = (list, modifier = { name: '', price: '0' }) => {
+        const row = document.createElement('div');
+        row.className = 'catalog-modifier-row';
+        row.setAttribute('data-modifier-row', '');
+        row.innerHTML = `
+            <div class="field" style="margin-bottom:0;">
+                <label>Nombre</label>
+                <input type="text" value="${String(modifier.name || '').replace(/"/g, '&quot;')}" data-modifier-name>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+                <label>Precio extra</label>
+                <input type="number" step="0.01" min="0" value="${String(modifier.price || '0').replace(/"/g, '&quot;')}" data-modifier-price>
+            </div>
+            <button class="catalog-modifier-remove" type="button" aria-label="Quitar modificador" data-modifier-remove>&times;</button>
+        `;
+
+        row.querySelectorAll('input').forEach((input) => {
+            input.addEventListener('input', () => syncModifierList(list));
+            input.addEventListener('change', () => syncModifierList(list));
+        });
+
+        row.querySelector('[data-modifier-remove]')?.addEventListener('click', () => {
+            row.remove();
+            syncModifierList(list);
+        });
+
+        list.appendChild(row);
+        syncModifierList(list);
+    };
+
+    const resetModifierList = (list, seedText = '') => {
+        list.innerHTML = '';
+        const parsed = parseModifierText(seedText);
+        if (parsed.length) {
+            parsed.forEach((modifier) => createModifierRow(list, modifier));
+            return;
+        }
+
+        createModifierRow(list, { name: '', price: '0' });
+    };
 
     const setStatus = (text) => {
         if (liveStatus) {
@@ -883,6 +989,11 @@ Leche de almendra|12.50"></textarea>
         modalForm.querySelector('[name="track_inventory"]').checked = row.dataset.track === '1';
         modalForm.querySelector('[name="is_active"]').checked = row.dataset.active === '1';
 
+        const modalModifierList = modalForm.querySelector('[data-modifier-list]');
+        if (modalModifierList) {
+            resetModifierList(modalModifierList, row.dataset.modifiersText ? JSON.parse(row.dataset.modifiersText) : '');
+        }
+
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     };
@@ -908,8 +1019,9 @@ Leche de almendra|12.50"></textarea>
             stockNote.textContent = `Stock disponible en {{ $store->name }}: ${stock}`;
         }
         if (quantityInput) {
-            quantityInput.max = String(Math.max(stock, 1));
-            quantityInput.value = stock > 0 ? '1' : '';
+            quantityInput.removeAttribute('max');
+            quantityInput.value = '';
+            quantityInput.placeholder = stock > 0 ? `Disponible: ${stock}` : '0';
         }
         if (destinationInput) {
             destinationInput.value = '';
@@ -964,6 +1076,15 @@ Leche de almendra|12.50"></textarea>
         filterInput.addEventListener('input', filterRows);
         filterRows();
     }
+
+    modifierContainers.forEach((list) => {
+        resetModifierList(list, list.dataset.modifierSeed ? JSON.parse(list.dataset.modifierSeed) : '');
+
+        const wrapper = list.closest('.field') || list.parentElement;
+        wrapper?.querySelector('[data-modifier-add]')?.addEventListener('click', () => {
+            createModifierRow(list, { name: '', price: '0' });
+        });
+    });
 
     rows.forEach((row) => {
         row.querySelectorAll('[data-catalog-inline-input]').forEach((input) => {
