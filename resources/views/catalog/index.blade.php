@@ -285,6 +285,12 @@
     .catalog-modifier-add {
         justify-self: start;
     }
+    .catalog-modifier-tools {
+        display: grid;
+        gap: 8px;
+        justify-items: start;
+        margin-top: 2px;
+    }
     .catalog-modal-head {
         display: flex;
         justify-content: space-between;
@@ -433,8 +439,10 @@
                                     <label>Modificadores</label>
                                     <input type="hidden" id="modifiers_text" name="modifiers_text" value="{{ old('modifiers_text') }}" data-modifier-hidden-input>
                                     <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='@json(old('modifiers_text', ''))'></div>
-                                    <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
-                                    <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
+                                    <div class="catalog-modifier-tools">
+                                        <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                                        <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -728,8 +736,10 @@
                 <label>Modificadores</label>
                 <input type="hidden" id="modal_modifiers_text" name="modifiers_text" value="" data-modifier-hidden-input>
                 <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='""'></div>
-                <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
-                <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
+                <div class="catalog-modifier-tools">
+                    <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                    <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
+                </div>
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <input id="modal_track_inventory" name="track_inventory" type="checkbox" value="1" style="width: auto;">
