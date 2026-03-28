@@ -505,11 +505,7 @@
                 <h3 id="hourlySalesHeading">En que momentos vende mas la sucursal hoy</h3>
             </div>
             <p id="hourlySalesSummary">
-                @if (($peakHourToday['tickets'] ?? 0) > 0)
-                    El pico de hoy va en {{ $peakHourToday['label'] }} con {{ $peakHourToday['tickets'] }} ticket(s).
-                @else
-                    En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.
-                @endif
+                {{ $hourlySalesModes['today']['summary'] ?? 'En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.' }}
             </p>
         </div>
 
@@ -617,22 +613,7 @@
 
     const salesTimeline = @json($salesTimeline);
     const paymentMix = @json($paymentMix->map(fn ($row) => ['label' => $row->label, 'tickets' => (int) $row->tickets, 'amountCents' => (int) $row->amountCents])->values());
-    const hourlySalesModes = {
-        today: {
-            heading: 'En que momentos vende mas la sucursal hoy',
-            summary: @json(($peakHourToday['tickets'] ?? 0) > 0
-                ? 'El pico de hoy va en '.$peakHourToday['label'].' con '.$peakHourToday['tickets'].' ticket(s).'
-                : 'En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.'),
-            points: @json($hourlySalesToday),
-        },
-        weeklyAverage: {
-            heading: 'Promedio semanal de horas fuertes',
-            summary: @json(($peakHourWeeklyAverage['tickets'] ?? 0) > 0
-                ? 'En la ultima semana, el promedio mas fuerte cae en '.$peakHourWeeklyAverage['label'].' con '.number_format((float) $peakHourWeeklyAverage['tickets'], 1).' ticket(s).'
-                : 'En cuanto haya mas ventas en la semana, aqui veras el promedio por hora.'),
-            points: @json($hourlySalesWeeklyAverage),
-        }
-    };
+    const hourlySalesModes = @json($hourlySalesModes);
 
     const salesTimelineCanvas = document.getElementById('salesTimelineChart');
     if (salesTimelineCanvas) {

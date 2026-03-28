@@ -309,6 +309,22 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
 
     $peakHourToday = collect($hourlySalesToday)->sortByDesc('tickets')->first();
     $peakHourWeeklyAverage = collect($hourlySalesWeeklyAverage)->sortByDesc('tickets')->first();
+    $hourlySalesModes = [
+        'today' => [
+            'heading' => 'En que momentos vende mas la sucursal hoy',
+            'summary' => ($peakHourToday['tickets'] ?? 0) > 0
+                ? 'El pico de hoy va en '.$peakHourToday['label'].' con '.$peakHourToday['tickets'].' ticket(s).'
+                : 'En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.',
+            'points' => $hourlySalesToday,
+        ],
+        'weeklyAverage' => [
+            'heading' => 'Promedio semanal de horas fuertes',
+            'summary' => ($peakHourWeeklyAverage['tickets'] ?? 0) > 0
+                ? 'En la ultima semana, el promedio mas fuerte cae en '.$peakHourWeeklyAverage['label'].' con '.number_format((float) $peakHourWeeklyAverage['tickets'], 1).' ticket(s).'
+                : 'En cuanto haya mas ventas en la semana, aqui veras el promedio por hora.',
+            'points' => $hourlySalesWeeklyAverage,
+        ],
+    ];
 
     $catalogProducts = $storeIds->isEmpty()
         ? collect()
@@ -470,6 +486,7 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         'hourlySalesWeeklyAverage',
         'peakHourToday',
         'peakHourWeeklyAverage',
+        'hourlySalesModes',
         'lowStockProducts',
         'recentEvents',
         'nextSteps'
@@ -1519,6 +1536,22 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
 
         $peakHourToday = collect($hourlySalesToday)->sortByDesc('tickets')->first();
         $peakHourWeeklyAverage = collect($hourlySalesWeeklyAverage)->sortByDesc('tickets')->first();
+        $hourlySalesModes = [
+            'today' => [
+                'heading' => 'En que momentos vende mas el negocio hoy',
+                'summary' => ($peakHourToday['tickets'] ?? 0) > 0
+                    ? 'El pico de hoy va en '.$peakHourToday['label'].' con '.$peakHourToday['tickets'].' ticket(s).'
+                    : 'En cuanto entren ventas hoy, aqui veras las horas donde se concentra el movimiento.',
+                'points' => $hourlySalesToday,
+            ],
+            'weeklyAverage' => [
+                'heading' => 'Promedio semanal de horas fuertes',
+                'summary' => ($peakHourWeeklyAverage['tickets'] ?? 0) > 0
+                    ? 'En la ultima semana, el promedio mas fuerte cae en '.$peakHourWeeklyAverage['label'].' con '.number_format((float) $peakHourWeeklyAverage['tickets'], 1).' ticket(s).'
+                    : 'En cuanto haya mas ventas en la semana, aqui veras el promedio por hora.',
+                'points' => $hourlySalesWeeklyAverage,
+            ],
+        ];
 
         $catalogProducts = DB::table('cloud_catalog_products')
             ->where('store_id', $storeId)
@@ -1683,6 +1716,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'hourlySalesWeeklyAverage',
             'peakHourToday',
             'peakHourWeeklyAverage',
+            'hourlySalesModes',
             'lowStockProducts',
             'nextSteps'
         ));
