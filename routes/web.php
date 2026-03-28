@@ -2027,6 +2027,11 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
         $search = trim((string) $request->query('q', ''));
+        $transferStoreOptions = Store::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->where('id', '!=', $store->id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
 
         $catalogQuery = DB::table('cloud_catalog_products')
             ->where('store_id', $store->id)
@@ -2085,6 +2090,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'catalogSuggestions' => $catalogSuggestions,
             'store' => $store,
             'search' => $search,
+            'transferStoreOptions' => $transferStoreOptions,
         ]);
     })->name('catalog.index');
 
@@ -2241,6 +2247,102 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ((bool) $product->is_active ? 'Producto pausado' : 'Producto reactivado').' en el catalogo compartido.'
         );
     })->name('catalog.toggle');
+
+    Route::post('/catalog/{productId}/transfer', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
+        /** @var User $user */
+        $user = Auth::user();
+        $sourceStore = $resolveStoreForUser($user);
+
+        $product = DB::table('cloud_catalog_products')
+            ->where('store_id', $sourceStore->id)
+            ->where('id', $productId)
+            ->firstOrFail();
+
+        $payload = $request->validate([
+            'destination_store_id' => [
+                'required',
+                'integer',
+                Rule::exists('stores', 'id')->where(fn ($query) => $query->where('tenant_id', $user->tenant_id)),
+            ],
+            'quantity' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $destinationStoreId = (int) $payload['destination_store_id'];
+        $quantity = (int) $payload['quantity'];
+
+        if ($destinationStoreId === (int) $sourceStore->id) {
+            return back()->withErrors(['destination_store_id' => 'Elige otra sucursal para mover stock.'])->withInput();
+        }
+
+        if (!(bool) $product->track_inventory) {
+            return back()->withErrors(['quantity' => 'Solo puedes mover stock de productos con inventario controlado.'])->withInput();
+        }
+
+        if ((int) $product->stock_on_hand < $quantity) {
+            return back()->withErrors(['quantity' => 'No hay suficiente stock disponible para mover esa cantidad.'])->withInput();
+        }
+
+        $destinationStore = Store::query()
+            ->where('tenant_id', $user->tenant_id)
+            ->where('id', $destinationStoreId)
+            ->firstOrFail(['id', 'name', 'code']);
+
+        DB::transaction(function () use ($bumpCatalogVersion, $destinationStoreId, $product, $quantity, $sourceStore) {
+            $sourceVersion = $bumpCatalogVersion((int) $sourceStore->id);
+            $destinationVersion = $bumpCatalogVersion($destinationStoreId);
+
+            DB::table('cloud_catalog_products')
+                ->where('id', $product->id)
+                ->update([
+                    'stock_on_hand' => max(0, (int) $product->stock_on_hand - $quantity),
+                    'catalog_version' => $sourceVersion,
+                    'updated_at' => now(),
+                ]);
+
+            $destinationProduct = DB::table('cloud_catalog_products')
+                ->where('store_id', $destinationStoreId)
+                ->where(function ($query) use ($product) {
+                    $query->where('sku', $product->sku);
+
+                    if (!empty($product->barcode)) {
+                        $query->orWhere('barcode', $product->barcode);
+                    }
+                })
+                ->first();
+
+            if ($destinationProduct) {
+                DB::table('cloud_catalog_products')
+                    ->where('id', $destinationProduct->id)
+                    ->update([
+                        'stock_on_hand' => (int) $destinationProduct->stock_on_hand + $quantity,
+                        'catalog_version' => $destinationVersion,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table('cloud_catalog_products')->insert([
+                    'store_id' => $destinationStoreId,
+                    'sku' => $product->sku,
+                    'barcode' => $product->barcode,
+                    'name' => $product->name,
+                    'price_cents' => (int) $product->price_cents,
+                    'cost_cents' => (int) ($product->cost_cents ?? 0),
+                    'stock_on_hand' => $quantity,
+                    'reorder_point' => (int) ($product->reorder_point ?? 0),
+                    'track_inventory' => (bool) $product->track_inventory,
+                    'is_active' => (bool) $product->is_active,
+                    'catalog_version' => $destinationVersion,
+                    'metadata_json' => $product->metadata_json,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        return redirect()->route(
+            'catalog.index',
+            ['page' => $request->query('page'), 'q' => $request->query('q')]
+        )->with('status', 'Se movieron '.$quantity.' unidad(es) de '.$product->name.' hacia '.$destinationStore->name.'.');
+    })->name('catalog.transfer');
 
     Route::delete('/catalog/{productId}', function (Request $request, int $productId) use ($bumpCatalogVersion, $resolveStoreForUser) {
         /** @var User $user */

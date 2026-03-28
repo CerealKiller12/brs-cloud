@@ -253,6 +253,14 @@
         box-shadow: 0 24px 60px rgba(18, 34, 48, .16);
         padding: 24px;
     }
+    .catalog-transfer-note {
+        display: grid;
+        gap: 6px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: var(--panel-soft);
+    }
     .catalog-modal-head {
         display: flex;
         justify-content: space-between;
@@ -528,6 +536,7 @@ Leche de almendra|12.50">{{ old('modifiers_text') }}</textarea>
                         data-reorder="{{ $item->reorder_point }}"
                         data-track="{{ $item->track_inventory ? 1 : 0 }}"
                         data-active="{{ $item->is_active ? 1 : 0 }}"
+                        data-transfer-url="{{ route('catalog.transfer', $item->id) }}"
                         data-modifiers-text='@json($modifiersText)'>
                         <td>
                             <input
@@ -595,6 +604,15 @@ Leche de almendra|12.50">{{ old('modifiers_text') }}</textarea>
                             </form>
                             <div class="catalog-actions">
                                 <button class="catalog-action primary is-hidden" type="submit" form="{{ $inlineFormId }}" data-catalog-inline-save>Guardar</button>
+                                @if ($item->track_inventory && $transferStoreOptions->isNotEmpty())
+                                    <button
+                                        class="catalog-action secondary compact"
+                                        type="button"
+                                        data-catalog-transfer-open
+                                        data-product-id="{{ $item->id }}">
+                                        Mover stock
+                                    </button>
+                                @endif
                                 <button
                                     class="catalog-action secondary compact"
                                     type="button"
@@ -700,6 +718,48 @@ Leche de almendra|12.50"></textarea>
     </div>
 </div>
 
+<div class="catalog-modal-shell" data-catalog-transfer-modal aria-hidden="true">
+    <div class="catalog-modal-card" style="width:min(620px, 100%);">
+        <div class="catalog-modal-head">
+            <div>
+                <small class="eyebrow">Mover stock</small>
+                <h3>Enviar existencias a otra sucursal</h3>
+                <p>Traspasa unidades del inventario de esta sucursal hacia otra tienda de tu negocio.</p>
+            </div>
+            <button class="catalog-modal-close" type="button" data-catalog-transfer-close aria-label="Cerrar">&times;</button>
+        </div>
+
+        <form method="POST" action="{{ route('catalog.transfer', 0) }}" class="grid" data-catalog-transfer-form>
+            @csrf
+
+            <div class="catalog-transfer-note">
+                <strong data-catalog-transfer-title>Producto</strong>
+                <span class="muted" data-catalog-transfer-stock>Stock disponible: 0</span>
+            </div>
+
+            <div class="field">
+                <label for="transfer_destination_store_id">Sucursal destino</label>
+                <select id="transfer_destination_store_id" name="destination_store_id" required>
+                    <option value="">Elige una sucursal</option>
+                    @foreach ($transferStoreOptions as $destinationStore)
+                        <option value="{{ $destinationStore->id }}">{{ $destinationStore->name }} · {{ $destinationStore->code }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="transfer_quantity">Cantidad a mover</label>
+                <input id="transfer_quantity" name="quantity" type="number" min="1" step="1" required>
+            </div>
+
+            <div class="row-actions">
+                <button class="button-secondary" type="button" data-catalog-transfer-close>Cancelar</button>
+                <button class="button" type="submit">Mover stock</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @push('scripts')
 <script>
 (() => {
@@ -716,6 +776,8 @@ Leche de almendra|12.50"></textarea>
     const rows = Array.from(root.querySelectorAll('[data-catalog-row]'));
     const modal = document.querySelector('[data-catalog-modal]');
     const modalForm = document.querySelector('[data-catalog-modal-form]');
+    const transferModal = document.querySelector('[data-catalog-transfer-modal]');
+    const transferForm = document.querySelector('[data-catalog-transfer-form]');
     const filterEmpty = root.querySelector('[data-catalog-filter-empty]');
     let source = null;
 
@@ -794,6 +856,15 @@ Leche de almendra|12.50"></textarea>
         modal.setAttribute('aria-hidden', 'true');
     };
 
+    const closeTransferModal = () => {
+        if (!transferModal) {
+            return;
+        }
+
+        transferModal.classList.remove('is-open');
+        transferModal.setAttribute('aria-hidden', 'true');
+    };
+
     const openModalForRow = (row) => {
         if (!modal || !modalForm || !row) {
             return;
@@ -814,6 +885,38 @@ Leche de almendra|12.50"></textarea>
 
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
+    };
+
+    const openTransferModalForRow = (row) => {
+        if (!transferModal || !transferForm || !row) {
+            return;
+        }
+
+        const name = row.dataset.name || 'Producto sin nombre';
+        const stock = Number(row.dataset.stock || '0');
+        const title = transferModal.querySelector('[data-catalog-transfer-title]');
+        const stockNote = transferModal.querySelector('[data-catalog-transfer-stock]');
+        const quantityInput = transferForm.querySelector('[name="quantity"]');
+        const destinationInput = transferForm.querySelector('[name="destination_store_id"]');
+
+        transferForm.action = row.dataset.transferUrl || transferForm.action;
+
+        if (title) {
+            title.textContent = name;
+        }
+        if (stockNote) {
+            stockNote.textContent = `Stock disponible en {{ $store->name }}: ${stock}`;
+        }
+        if (quantityInput) {
+            quantityInput.max = String(Math.max(stock, 1));
+            quantityInput.value = stock > 0 ? '1' : '';
+        }
+        if (destinationInput) {
+            destinationInput.value = '';
+        }
+
+        transferModal.classList.add('is-open');
+        transferModal.setAttribute('aria-hidden', 'false');
     };
 
     const normalizeValue = (value, type) => {
@@ -878,8 +981,19 @@ Leche de almendra|12.50"></textarea>
         });
     });
 
+    root.querySelectorAll('[data-catalog-transfer-open]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const row = button.closest('[data-catalog-row]');
+            openTransferModalForRow(row);
+        });
+    });
+
     document.querySelectorAll('[data-catalog-edit-close]').forEach((button) => {
         button.addEventListener('click', closeModal);
+    });
+
+    document.querySelectorAll('[data-catalog-transfer-close]').forEach((button) => {
+        button.addEventListener('click', closeTransferModal);
     });
 
     if (modal) {
@@ -890,9 +1004,18 @@ Leche de almendra|12.50"></textarea>
         });
     }
 
+    if (transferModal) {
+        transferModal.addEventListener('click', (event) => {
+            if (event.target === transferModal) {
+                closeTransferModal();
+            }
+        });
+    }
+
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
             closeModal();
+            closeTransferModal();
         }
     });
 
