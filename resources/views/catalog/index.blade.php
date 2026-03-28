@@ -176,7 +176,12 @@
         gap: 8px;
         justify-content: flex-end;
         align-items: center;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+    }
+    .catalog-actions form {
+        display: inline-flex;
+        margin: 0;
     }
     .catalog-action {
         min-height: 40px;
@@ -207,9 +212,9 @@
         color: #3d566d;
     }
     .catalog-action.compact {
-        min-height: 36px;
-        padding: 0 14px;
-        font-size: 13px;
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 12px;
     }
     .catalog-action.danger {
         width: 36px;
@@ -289,7 +294,11 @@
         display: grid;
         gap: 8px;
         justify-items: start;
-        margin-top: 2px;
+        margin-top: 12px;
+    }
+    .catalog-modal-section {
+        display: grid;
+        gap: 12px;
     }
     .catalog-modal-head {
         display: flex;
@@ -585,12 +594,6 @@
                             <div class="catalog-meta">
                                 <span class="muted">{{ $item->sku }}{{ $item->barcode ? ' · '.$item->barcode : '' }}</span>
                             </div>
-                            @if ($modifiers->isNotEmpty())
-                                <div class="catalog-meta">
-                                    <span class="pill">{{ $modifiers->count() }} modificador(es)</span>
-                                    <span class="muted">{{ $modifiers->take(2)->map(fn ($modifier) => trim((string) ($modifier['name'] ?? '')).(((int) ($modifier['priceDeltaCents'] ?? 0)) > 0 ? ' (+MX$'.number_format(((int) ($modifier['priceDeltaCents'] ?? 0)) / 100, 2).')' : ''))->implode(' · ') }}</span>
-                                </div>
-                            @endif
                         </td>
                         <td>
                             <input
@@ -732,13 +735,17 @@
                 <label for="modal_reorder_point">Punto de reorden</label>
                 <input id="modal_reorder_point" name="reorder_point" type="number" min="0" required>
             </div>
-            <div class="field" style="grid-column: 1 / -1;">
-                <label>Modificadores</label>
-                <input type="hidden" id="modal_modifiers_text" name="modifiers_text" value="" data-modifier-hidden-input>
-                <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='""'></div>
-                <div class="catalog-modifier-tools">
-                    <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
-                    <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
+            <div class="surface catalog-modal-section" style="grid-column: 1 / -1;">
+                <div>
+                    <small class="eyebrow">Extras y modificadores</small>
+                    <p class="muted" style="margin-top: 4px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</p>
+                </div>
+                <div class="field" style="margin-bottom: 0;">
+                    <input type="hidden" id="modal_modifiers_text" name="modifiers_text" value="" data-modifier-hidden-input>
+                    <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='""'></div>
+                    <div class="catalog-modifier-tools">
+                        <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                    </div>
                 </div>
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
