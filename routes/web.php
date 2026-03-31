@@ -141,7 +141,84 @@ $buildCatalogProductMetadata = function ($metadataJson, $modifiers, array $extra
     return json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 };
 
-$buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext) {
+$resolveCloudSaleOccurredAt = function (object $event, string $storeTimezone) {
+    $payload = json_decode($event->payload_json, true) ?: [];
+
+    try {
+        return !empty($payload['createdAt'])
+            ? \Carbon\Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
+            : (!empty($event->occurred_at)
+                ? \Carbon\Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
+                : \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone));
+    } catch (\Throwable) {
+        return \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone);
+    }
+};
+
+$extractCloudSaleId = function (array $payload, string $fallback = ''): string {
+    return trim((string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $fallback)));
+};
+
+$buildEffectiveCloudSalesFromSyncEvents = function ($events, string $storeTimezone) use ($extractCloudSaleId, $resolveCloudSaleOccurredAt) {
+    $returnEventsBySaleId = collect($events)
+        ->filter(fn ($event) => $event->event_type === 'sale.returned')
+        ->reduce(function (array $carry, object $event) use ($extractCloudSaleId, $resolveCloudSaleOccurredAt, $storeTimezone) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $saleId = $extractCloudSaleId($payload);
+
+            if ($saleId === '') {
+                return $carry;
+            }
+
+            $receivedAt = !empty($event->received_at) ? \Carbon\Carbon::parse($event->received_at) : null;
+            $occurredAt = $resolveCloudSaleOccurredAt($event, $storeTimezone);
+            $existing = $carry[$saleId] ?? null;
+
+            if ($existing && $receivedAt && $existing['receivedAt'] && $receivedAt->lte($existing['receivedAt'])) {
+                return $carry;
+            }
+
+            $carry[$saleId] = [
+                'payload' => $payload,
+                'occurredAt' => $occurredAt,
+                'receivedAt' => $receivedAt,
+            ];
+
+            return $carry;
+        }, []);
+
+    return collect($events)
+        ->filter(fn ($event) => $event->event_type === 'sale.created')
+        ->map(function ($event) use ($extractCloudSaleId, $resolveCloudSaleOccurredAt, $returnEventsBySaleId, $storeTimezone) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $saleId = $extractCloudSaleId($payload, $event->event_id);
+            $createSalePayload = is_array($payload['sale'] ?? null) ? $payload['sale'] : [];
+            $returnMeta = $returnEventsBySaleId[$saleId] ?? null;
+            $returnPayload = is_array($returnMeta['payload'] ?? null) ? $returnMeta['payload'] : [];
+            $returnedSalePayload = is_array($returnPayload['sale'] ?? null) ? $returnPayload['sale'] : [];
+            $effectiveSalePayload = $returnedSalePayload ?: $createSalePayload;
+            $items = $effectiveSalePayload['items']
+                ?? $payload['items']
+                ?? data_get($payload, 'sale.items', []);
+
+            return (object) [
+                'sale_id' => $saleId,
+                'store_id' => $event->store_id,
+                'device_id' => $event->device_id,
+                'folio' => trim((string) ($effectiveSalePayload['folio'] ?? $payload['folio'] ?? data_get($payload, 'sale.folio', ''))),
+                'occurred_at' => $resolveCloudSaleOccurredAt($event, $storeTimezone),
+                'payment_method' => (string) ($effectiveSalePayload['paymentMethod'] ?? $payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                'total_cents' => (int) ($effectiveSalePayload['totalCents'] ?? $payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                'items' => is_array($items) ? $items : [],
+                'status' => $returnMeta
+                    ? 'refunded'
+                    : (string) ($effectiveSalePayload['status'] ?? $payload['status'] ?? data_get($payload, 'sale.status', 'completed')),
+            ];
+        })
+        ->values();
+};
+
+$buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext, $buildEffectiveCloudSalesFromSyncEvents) {
     $editId = $request->integer('edit');
     $tenantId = $user->tenant_id;
     [$activeStore] = $buildStoreContext($user);
@@ -194,49 +271,30 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         ->get(['device_id', 'name', 'platform', 'store_id'])
         ->keyBy('device_id');
 
-    $salesHistory = DB::table('sync_events')
-        ->select(['store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
-        ->where('tenant_id', $tenantId)
-        ->where('event_type', 'sale.created')
-        ->where('received_at', '>=', $thirtyDaysAgoUtc)
-        ->orderBy('received_at')
-        ->get()
-        ->map(function ($event) use ($storeTimezone) {
-            $payload = json_decode($event->payload_json, true) ?: [];
+    $salesHistory = $buildEffectiveCloudSalesFromSyncEvents(
+        DB::table('sync_events')
+            ->select(['event_id', 'event_type', 'store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+            ->where('tenant_id', $tenantId)
+            ->whereIn('event_type', ['sale.created', 'sale.returned'])
+            ->where('received_at', '>=', $thirtyDaysAgoUtc)
+            ->orderBy('received_at')
+            ->get(),
+        $storeTimezone
+    );
 
-            try {
-                $occurredAt = !empty($payload['createdAt'])
-                    ? \Carbon\Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
-                    : (!empty($event->occurred_at)
-                        ? \Carbon\Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
-                        : \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone));
-            } catch (\Throwable) {
-                $occurredAt = \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone);
-            }
-
-            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
-
-            return (object) [
-                'store_id' => $event->store_id,
-                'device_id' => $event->device_id,
-                'folio' => trim((string) ($payload['folio'] ?? data_get($payload, 'sale.folio', ''))),
-                'occurred_at' => $occurredAt,
-                'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
-                'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
-                'items' => is_array($items) ? $items : [],
-            ];
-        })
+    $activeSalesHistory = $salesHistory
+        ->filter(fn ($sale) => ($sale->status ?? 'completed') === 'completed')
         ->values();
 
-    $salesLast7Days = $salesHistory
+    $salesLast7Days = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
         ->values();
 
-    $salesTodayCollection = $salesHistory
+    $salesTodayCollection = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
         ->values();
 
-    $salesYesterdayCollection = $salesHistory
+    $salesYesterdayCollection = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
         ->values();
 
@@ -771,6 +829,7 @@ $humanizeEventType = function (?string $eventType): string {
         'product.deleted' => 'Producto eliminado',
         'product.stock-adjusted' => 'Stock ajustado',
         'sale.created' => 'Venta registrada',
+        'sale.returned' => 'Devolucion registrada',
         'cash-session.opened' => 'Caja abierta',
         'cash-session.closed' => 'Caja cerrada',
         default => Str::headline(str_replace(['.', '-'], ' ', (string) $eventType)),
@@ -865,14 +924,32 @@ $describeSyncEvent = function (?string $eventType, array $payload): string {
     $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
     $itemsCount = is_countable($items) ? count($items) : 0;
     $stockOnHand = $payload['stockOnHand'] ?? null;
+    $stockDelta = is_numeric($payload['delta'] ?? null) ? (int) round($payload['delta']) : null;
+    $stockReason = match ((string) ($payload['reason'] ?? '')) {
+        'waste' => 'baja de inventario',
+        'return' => 'reingreso por devolucion',
+        'manual' => 'ajuste manual',
+        default => null,
+    };
+    $restockItems = (bool) ($payload['restockItems']
+        ?? data_get($payload, 'returnInfo.restockedItems')
+        ?? data_get($payload, 'sale.returnInfo.restockedItems', false));
+    $returnReason = trim((string) ($payload['reason'] ?? data_get($payload, 'returnInfo.reason', data_get($payload, 'sale.returnInfo.reason', ''))));
 
     return match ($eventType) {
         'sale.created' => $folio !== ''
             ? "Ticket {$folio}".($itemsCount > 0 ? " · {$itemsCount} producto(s)" : '')
             : ($itemsCount > 0 ? "{$itemsCount} producto(s) cobrados" : 'Venta enviada desde caja'),
+        'sale.returned' => trim(collect([
+            $folio !== '' ? "Ticket {$folio}" : 'Ticket devuelto',
+            $returnReason !== '' ? $returnReason : null,
+            $restockItems ? 'inventario reingresado' : 'sin reingreso de inventario',
+        ])->filter()->implode(' · ')),
         'product.stock-adjusted' => trim(collect([
             $name !== '' ? $name : null,
             $sku !== '' ? "SKU {$sku}" : null,
+            $stockReason,
+            $stockDelta !== null ? ($stockDelta >= 0 ? "+{$stockDelta}" : (string) $stockDelta) : null,
             is_numeric($stockOnHand) ? "stock actual {$stockOnHand}" : null,
         ])->filter()->implode(' · ')) ?: 'Movimiento de inventario',
         'product.created', 'product.updated' => trim(collect([
@@ -1400,7 +1477,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return view('stores.index', $businessDashboard);
     })->name('dashboard');
 
-    Route::get('/store-dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+    Route::get('/store-dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $buildEffectiveCloudSalesFromSyncEvents) {
         /** @var User $user */
         $user = Auth::user();
         $tenantId = $user->tenant_id;
@@ -1421,49 +1498,31 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->get(['device_id', 'name', 'platform'])
             ->keyBy('device_id');
 
-        $salesHistory = DB::table('sync_events')
-            ->select(['device_id', 'payload_json', 'occurred_at', 'received_at'])
-            ->where('tenant_id', $tenantId)
-            ->where('store_id', $storeId)
-            ->where('event_type', 'sale.created')
-            ->where('received_at', '>=', $thirtyDaysAgoUtc)
-            ->orderBy('received_at')
-            ->get()
-            ->map(function ($event) use ($storeTimezone) {
-                $payload = json_decode($event->payload_json, true) ?: [];
+        $salesHistory = $buildEffectiveCloudSalesFromSyncEvents(
+            DB::table('sync_events')
+                ->select(['event_id', 'event_type', 'store_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->whereIn('event_type', ['sale.created', 'sale.returned'])
+                ->where('received_at', '>=', $thirtyDaysAgoUtc)
+                ->orderBy('received_at')
+                ->get(),
+            $storeTimezone
+        );
 
-                try {
-                    $occurredAt = !empty($payload['createdAt'])
-                        ? \Carbon\Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
-                        : (!empty($event->occurred_at)
-                            ? \Carbon\Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
-                            : \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone));
-                } catch (\Throwable) {
-                    $occurredAt = \Carbon\Carbon::parse($event->received_at)->setTimezone($storeTimezone);
-                }
-
-                $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
-
-                return (object) [
-                    'device_id' => $event->device_id,
-                    'folio' => trim((string) ($payload['folio'] ?? data_get($payload, 'sale.folio', ''))),
-                    'occurred_at' => $occurredAt,
-                    'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
-                    'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
-                    'items' => is_array($items) ? $items : [],
-                ];
-            })
+        $activeSalesHistory = $salesHistory
+            ->filter(fn ($sale) => ($sale->status ?? 'completed') === 'completed')
             ->values();
 
-        $salesLast7Days = $salesHistory
+        $salesLast7Days = $activeSalesHistory
             ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
             ->values();
 
-        $salesTodayCollection = $salesHistory
+        $salesTodayCollection = $activeSalesHistory
             ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
             ->values();
 
-        $salesYesterdayCollection = $salesHistory
+        $salesYesterdayCollection = $activeSalesHistory
             ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
             ->values();
 

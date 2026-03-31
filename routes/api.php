@@ -331,7 +331,110 @@ $issueDeviceTokenForStore = function (object $store, array $payload, Request $re
     ]);
 };
 
-$buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
+$resolveCloudSaleOccurredAt = function (object $event, array $payload) {
+    try {
+        return !empty($payload['createdAt'])
+            ? Carbon::parse($payload['createdAt'])
+            : (!empty($event->occurred_at)
+                ? Carbon::parse($event->occurred_at)
+                : Carbon::parse($event->received_at));
+    } catch (\Throwable) {
+        return Carbon::parse($event->received_at);
+    }
+};
+
+$extractCloudSaleId = function (array $payload, string $fallback = ''): string {
+    return trim((string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $fallback)));
+};
+
+$buildEffectiveCloudSales = function ($events, string $storeTimezone, $deviceMetaById) use ($extractCloudSaleId, $resolveCloudSaleOccurredAt) {
+    $returnEventsBySaleId = collect($events)
+        ->filter(fn ($event) => $event->event_type === 'sale.returned')
+        ->reduce(function (array $carry, object $event) use ($extractCloudSaleId, $resolveCloudSaleOccurredAt) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $saleId = $extractCloudSaleId($payload);
+
+            if ($saleId === '') {
+                return $carry;
+            }
+
+            $receivedAt = !empty($event->received_at) ? Carbon::parse($event->received_at) : null;
+            $occurredAt = $resolveCloudSaleOccurredAt($event, $payload);
+            $existing = $carry[$saleId] ?? null;
+
+            if ($existing && $receivedAt && $existing['receivedAt'] && $receivedAt->lte($existing['receivedAt'])) {
+                return $carry;
+            }
+
+            $carry[$saleId] = [
+                'payload' => $payload,
+                'occurredAt' => $occurredAt,
+                'receivedAt' => $receivedAt,
+            ];
+
+            return $carry;
+        }, []);
+
+    return collect($events)
+        ->filter(fn ($event) => $event->event_type === 'sale.created')
+        ->map(function ($event) use ($deviceMetaById, $extractCloudSaleId, $resolveCloudSaleOccurredAt, $returnEventsBySaleId, $storeTimezone) {
+            $payload = json_decode($event->payload_json, true) ?: [];
+            $saleId = $extractCloudSaleId($payload, $event->event_id);
+            $createSalePayload = is_array($payload['sale'] ?? null) ? $payload['sale'] : [];
+            $returnMeta = $returnEventsBySaleId[$saleId] ?? null;
+            $returnPayload = is_array($returnMeta['payload'] ?? null) ? $returnMeta['payload'] : [];
+            $returnedSalePayload = is_array($returnPayload['sale'] ?? null) ? $returnPayload['sale'] : [];
+            $effectiveSalePayload = $returnedSalePayload ?: $createSalePayload;
+            $items = $effectiveSalePayload['items']
+                ?? $payload['items']
+                ?? data_get($payload, 'sale.items', []);
+            $payments = $effectiveSalePayload['payments']
+                ?? $payload['payments']
+                ?? data_get($payload, 'sale.payments', []);
+            $occurredAt = $resolveCloudSaleOccurredAt($event, $payload)->setTimezone($storeTimezone);
+            $device = $deviceMetaById->get($event->device_id);
+            $status = $returnMeta
+                ? 'refunded'
+                : (string) ($effectiveSalePayload['status'] ?? $payload['status'] ?? data_get($payload, 'sale.status', 'completed'));
+            $returnInfo = $returnMeta
+                ? (is_array($effectiveSalePayload['returnInfo'] ?? null)
+                    ? $effectiveSalePayload['returnInfo']
+                    : (is_array($returnPayload['returnInfo'] ?? null) ? $returnPayload['returnInfo'] : null))
+                : (is_array($effectiveSalePayload['returnInfo'] ?? null) ? $effectiveSalePayload['returnInfo'] : null);
+            $cashierName = trim((string) ($effectiveSalePayload['cashierName'] ?? $payload['cashierName'] ?? data_get($payload, 'sale.cashierName', $device?->name ?: $event->device_id)));
+
+            return (object) [
+                'id' => $saleId,
+                'device_id' => $event->device_id,
+                'folio' => (string) ($effectiveSalePayload['folio'] ?? $payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
+                'origin_label' => ($effectiveSalePayload['originLabel'] ?? $payload['originLabel'] ?? data_get($payload, 'sale.originLabel')) ?: null,
+                'occurred_at' => $occurredAt,
+                'synced_at' => $returnMeta && $returnMeta['receivedAt']
+                    ? $returnMeta['receivedAt']->toIso8601String()
+                    : (!empty($event->received_at) ? Carbon::parse($event->received_at)->toIso8601String() : null),
+                'cashier_id' => (string) ($effectiveSalePayload['cashierId'] ?? $payload['cashierId'] ?? data_get($payload, 'sale.cashierId', $event->device_id)),
+                'cashier_name' => $cashierName !== '' ? $cashierName : ($device?->name ?: $event->device_id),
+                'payment_method' => (string) ($effectiveSalePayload['paymentMethod'] ?? $payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
+                'subtotal_cents' => (int) ($effectiveSalePayload['subtotalCents'] ?? $payload['subtotalCents'] ?? data_get($payload, 'sale.subtotalCents', 0)),
+                'discount_cents' => (int) ($effectiveSalePayload['discountCents'] ?? $payload['discountCents'] ?? data_get($payload, 'sale.discountCents', 0)),
+                'tax_cents' => (int) ($effectiveSalePayload['taxCents'] ?? $payload['taxCents'] ?? data_get($payload, 'sale.taxCents', 0)),
+                'total_cents' => (int) ($effectiveSalePayload['totalCents'] ?? $payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
+                'status' => $status,
+                'payments' => [
+                    'cashCents' => (int) ($payments['cashCents'] ?? $payload['cashAmountCents'] ?? data_get($payload, 'sale.cashAmountCents', 0)),
+                    'cardCents' => (int) ($payments['cardCents'] ?? $payload['cardAmountCents'] ?? data_get($payload, 'sale.cardAmountCents', 0)),
+                    'transferCents' => (int) ($payments['transferCents'] ?? $payload['transferAmountCents'] ?? data_get($payload, 'sale.transferAmountCents', 0)),
+                ],
+                'cash_received_cents' => (int) ($effectiveSalePayload['cashReceivedCents'] ?? $payload['cashReceivedCents'] ?? data_get($payload, 'sale.cashReceivedCents', 0)),
+                'change_due_cents' => (int) ($effectiveSalePayload['changeDueCents'] ?? $payload['changeDueCents'] ?? data_get($payload, 'sale.changeDueCents', 0)),
+                'items' => is_array($items) ? $items : [],
+                'return_info' => $returnInfo,
+            ];
+        })
+        ->values();
+};
+
+$buildDashboardSummaryForStore = function (int $tenantId, int $storeId) use ($buildEffectiveCloudSales) {
     $store = DB::table('stores')
         ->where('tenant_id', $tenantId)
         ->where('id', $storeId)
@@ -353,48 +456,32 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
         ->get(['device_id', 'name', 'platform'])
         ->keyBy('device_id');
 
-    $salesHistory = DB::table('sync_events')
-        ->select(['device_id', 'payload_json', 'occurred_at', 'received_at'])
-        ->where('tenant_id', $tenantId)
-        ->where('store_id', $storeId)
-        ->where('event_type', 'sale.created')
-        ->where('received_at', '>=', $thirtyDaysAgoUtc)
-        ->orderBy('received_at')
-        ->get()
-        ->map(function ($event) use ($storeTimezone) {
-            $payload = json_decode($event->payload_json, true) ?: [];
+    $salesHistory = $buildEffectiveCloudSales(
+        DB::table('sync_events')
+            ->select(['event_id', 'event_type', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+            ->where('tenant_id', $tenantId)
+            ->where('store_id', $storeId)
+            ->whereIn('event_type', ['sale.created', 'sale.returned'])
+            ->where('received_at', '>=', $thirtyDaysAgoUtc)
+            ->orderBy('received_at')
+            ->get(),
+        $storeTimezone,
+        $deviceMetaById
+    );
 
-            try {
-                $occurredAt = !empty($payload['createdAt'])
-                    ? Carbon::parse($payload['createdAt'])->setTimezone($storeTimezone)
-                    : (!empty($event->occurred_at)
-                        ? Carbon::parse($event->occurred_at)->setTimezone($storeTimezone)
-                        : Carbon::parse($event->received_at)->setTimezone($storeTimezone));
-            } catch (\Throwable) {
-                $occurredAt = Carbon::parse($event->received_at)->setTimezone($storeTimezone);
-            }
-
-            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
-
-            return (object) [
-                'device_id' => $event->device_id,
-                'occurred_at' => $occurredAt,
-                'payment_method' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
-                'total_cents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
-                'items' => is_array($items) ? $items : [],
-            ];
-        })
+    $activeSalesHistory = $salesHistory
+        ->filter(fn ($sale) => ($sale->status ?? 'completed') === 'completed')
         ->values();
 
-    $salesLast7Days = $salesHistory
+    $salesLast7Days = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($sevenDaysAgo))
         ->values();
 
-    $salesTodayCollection = $salesHistory
+    $salesTodayCollection = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($todayStart))
         ->values();
 
-    $salesYesterdayCollection = $salesHistory
+    $salesYesterdayCollection = $activeSalesHistory
         ->filter(fn ($sale) => $sale->occurred_at->gte($yesterdayStart) && $sale->occurred_at->lt($todayStart))
         ->values();
 
@@ -579,60 +666,45 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) {
     ];
 };
 
-$resolveCloudSaleOccurredAt = function (object $event, array $payload) {
-    try {
-        return !empty($payload['createdAt'])
-            ? Carbon::parse($payload['createdAt'])
-            : (!empty($event->occurred_at)
-                ? Carbon::parse($event->occurred_at)
-                : Carbon::parse($event->received_at));
-    } catch (\Throwable) {
-        return Carbon::parse($event->received_at);
-    }
-};
-
-$buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string $search = null) use ($resolveCloudSaleOccurredAt) {
+$buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string $search = null) use ($buildEffectiveCloudSales) {
     $deviceMetaById = Device::query()
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
         ->get(['device_id', 'name', 'platform'])
         ->keyBy('device_id');
+    $storeTimezone = trim((string) DB::table('stores')
+        ->where('tenant_id', $tenantId)
+        ->where('id', $storeId)
+        ->value('timezone')) ?: 'America/Tijuana';
 
     $normalizedSearch = $search ? mb_strtolower(trim($search)) : '';
 
-    $items = DB::table('sync_events')
-        ->select(['event_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+    $events = DB::table('sync_events')
+        ->select(['event_id', 'event_type', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
-        ->where('event_type', 'sale.created')
+        ->whereIn('event_type', ['sale.created', 'sale.returned'])
         ->orderByDesc('received_at')
-        ->limit(1000)
-        ->get()
-        ->map(function ($event) use ($deviceMetaById, $resolveCloudSaleOccurredAt) {
-            $payload = json_decode($event->payload_json, true) ?: [];
-            $payments = $payload['payments'] ?? data_get($payload, 'sale.payments', []);
-            $occurredAt = $resolveCloudSaleOccurredAt($event, $payload);
-            $device = $deviceMetaById->get($event->device_id);
-            $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
-            $saleId = (string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $event->event_id));
-            $cashierName = trim((string) ($payload['cashierName'] ?? data_get($payload, 'sale.cashierName', $device?->name ?: $event->device_id)));
+        ->limit(2000)
+        ->get();
 
+    $items = $buildEffectiveCloudSales($events, $storeTimezone, $deviceMetaById)
+        ->sortByDesc('occurred_at')
+        ->map(function ($sale) {
             return [
-                'id' => $saleId,
-                'folio' => (string) ($payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
-                'paymentMethod' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
-                'totalCents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', 0)),
-                'createdAt' => $occurredAt->toIso8601String(),
-                'syncedAt' => !empty($event->received_at) ? Carbon::parse($event->received_at)->toIso8601String() : null,
-                'cashierName' => $cashierName !== '' ? $cashierName : ($device?->name ?: $event->device_id),
-                'itemsCount' => is_array($items) ? count($items) : 0,
-                'payments' => [
-                    'cashCents' => (int) ($payments['cashCents'] ?? $payload['cashAmountCents'] ?? data_get($payload, 'sale.cashAmountCents', 0)),
-                    'cardCents' => (int) ($payments['cardCents'] ?? $payload['cardAmountCents'] ?? data_get($payload, 'sale.cardAmountCents', 0)),
-                    'transferCents' => (int) ($payments['transferCents'] ?? $payload['transferAmountCents'] ?? data_get($payload, 'sale.transferAmountCents', 0)),
-                ],
-                'cashReceivedCents' => (int) ($payload['cashReceivedCents'] ?? data_get($payload, 'sale.cashReceivedCents', 0)),
-                'changeDueCents' => (int) ($payload['changeDueCents'] ?? data_get($payload, 'sale.changeDueCents', 0)),
+                'id' => $sale->id,
+                'folio' => $sale->folio,
+                'originLabel' => $sale->origin_label,
+                'paymentMethod' => $sale->payment_method,
+                'totalCents' => $sale->total_cents,
+                'createdAt' => $sale->occurred_at->toIso8601String(),
+                'syncedAt' => $sale->synced_at,
+                'cashierName' => $sale->cashier_name,
+                'itemsCount' => is_array($sale->items) ? count($sale->items) : 0,
+                'payments' => $sale->payments,
+                'cashReceivedCents' => $sale->cash_received_cents,
+                'changeDueCents' => $sale->change_due_cents,
+                'status' => $sale->status,
             ];
         })
         ->filter(function (array $sale) use ($normalizedSearch) {
@@ -663,37 +735,32 @@ $buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string 
     ];
 };
 
-$buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $saleId) use ($resolveCloudSaleOccurredAt, $normalizeProductModifiers) {
+$buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $saleId) use ($buildEffectiveCloudSales, $normalizeProductModifiers) {
     $deviceMetaById = Device::query()
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
         ->get(['device_id', 'name', 'platform'])
         ->keyBy('device_id');
+    $storeTimezone = trim((string) DB::table('stores')
+        ->where('tenant_id', $tenantId)
+        ->where('id', $storeId)
+        ->value('timezone')) ?: 'America/Tijuana';
 
-    $event = DB::table('sync_events')
-        ->select(['event_id', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
+    $events = DB::table('sync_events')
+        ->select(['event_id', 'event_type', 'device_id', 'payload_json', 'occurred_at', 'received_at'])
         ->where('tenant_id', $tenantId)
         ->where('store_id', $storeId)
-        ->where('event_type', 'sale.created')
+        ->whereIn('event_type', ['sale.created', 'sale.returned'])
         ->orderByDesc('received_at')
-        ->limit(1000)
-        ->get()
-        ->first(function ($row) use ($saleId) {
-            $payload = json_decode($row->payload_json, true) ?: [];
-            $payloadSaleId = (string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $row->event_id));
+        ->limit(2000)
+        ->get();
 
-            return $payloadSaleId === $saleId;
-        });
+    $sale = $buildEffectiveCloudSales($events, $storeTimezone, $deviceMetaById)
+        ->first(fn ($item) => $item->id === $saleId);
 
-    abort_unless($event, 404, 'No pude encontrar ese ticket en Venpi Cloud.');
+    abort_unless($sale, 404, 'No pude encontrar ese ticket en Venpi Cloud.');
 
-    $payload = json_decode($event->payload_json, true) ?: [];
-    $payments = $payload['payments'] ?? data_get($payload, 'sale.payments', []);
-    $items = $payload['items'] ?? data_get($payload, 'sale.items', []);
-    $occurredAt = $resolveCloudSaleOccurredAt($event, $payload);
-    $device = $deviceMetaById->get($event->device_id);
-
-    $detailItems = collect(is_array($items) ? $items : [])
+    $detailItems = collect(is_array($sale->items) ? $sale->items : [])
         ->values()
         ->map(function (array $item, int $index) use ($saleId) {
             return [
@@ -711,26 +778,24 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
         ->all();
 
     return [
-        'id' => $saleId,
-        'folio' => (string) ($payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
-        'cashierId' => (string) ($payload['cashierId'] ?? data_get($payload, 'sale.cashierId', $event->device_id)),
-        'cashierName' => (string) ($payload['cashierName'] ?? data_get($payload, 'sale.cashierName', $device?->name ?: $event->device_id)),
-        'paymentMethod' => (string) ($payload['paymentMethod'] ?? data_get($payload, 'sale.paymentMethod', 'cash')),
-        'subtotalCents' => (int) ($payload['subtotalCents'] ?? data_get($payload, 'sale.subtotalCents', collect($detailItems)->sum('totalCents'))),
-        'discountCents' => (int) ($payload['discountCents'] ?? data_get($payload, 'sale.discountCents', 0)),
-        'taxCents' => (int) ($payload['taxCents'] ?? data_get($payload, 'sale.taxCents', 0)),
-        'totalCents' => (int) ($payload['totalCents'] ?? data_get($payload, 'sale.totalCents', collect($detailItems)->sum('totalCents'))),
-        'status' => (string) ($payload['status'] ?? data_get($payload, 'sale.status', 'completed')),
-        'createdAt' => $occurredAt->toIso8601String(),
-        'syncedAt' => !empty($event->received_at) ? Carbon::parse($event->received_at)->toIso8601String() : null,
-        'payments' => [
-            'cashCents' => (int) ($payments['cashCents'] ?? $payload['cashAmountCents'] ?? data_get($payload, 'sale.cashAmountCents', 0)),
-            'cardCents' => (int) ($payments['cardCents'] ?? $payload['cardAmountCents'] ?? data_get($payload, 'sale.cardAmountCents', 0)),
-            'transferCents' => (int) ($payments['transferCents'] ?? $payload['transferAmountCents'] ?? data_get($payload, 'sale.transferAmountCents', 0)),
-        ],
-        'cashReceivedCents' => (int) ($payload['cashReceivedCents'] ?? data_get($payload, 'sale.cashReceivedCents', 0)),
-        'changeDueCents' => (int) ($payload['changeDueCents'] ?? data_get($payload, 'sale.changeDueCents', 0)),
+        'id' => $sale->id,
+        'folio' => $sale->folio,
+        'originLabel' => $sale->origin_label,
+        'cashierId' => $sale->cashier_id,
+        'cashierName' => $sale->cashier_name,
+        'paymentMethod' => $sale->payment_method,
+        'subtotalCents' => $sale->subtotal_cents > 0 ? $sale->subtotal_cents : collect($detailItems)->sum('totalCents'),
+        'discountCents' => $sale->discount_cents,
+        'taxCents' => $sale->tax_cents,
+        'totalCents' => $sale->total_cents > 0 ? $sale->total_cents : collect($detailItems)->sum('totalCents'),
+        'status' => $sale->status,
+        'createdAt' => $sale->occurred_at->toIso8601String(),
+        'syncedAt' => $sale->synced_at,
+        'payments' => $sale->payments,
+        'cashReceivedCents' => $sale->cash_received_cents,
+        'changeDueCents' => $sale->change_due_cents,
         'items' => $detailItems,
+        'returnInfo' => $sale->return_info,
     ];
 };
 
@@ -1436,6 +1501,44 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                             'catalog_version' => $catalogVersion,
                             'updated_at' => now(),
                         ]);
+                }
+            }
+
+            if ($eventType === 'sale.returned' && is_array($saleItems)) {
+                $restockItems = (bool) ($eventPayload['restockItems']
+                    ?? data_get($eventPayload, 'returnInfo.restockedItems')
+                    ?? data_get($eventPayload, 'sale.returnInfo.restockedItems', false));
+
+                if ($restockItems) {
+                    $catalogVersion = null;
+
+                    foreach ($saleItems as $item) {
+                        $sku = trim((string) ($item['productSku'] ?? ''));
+                        $quantity = (int) round($item['quantity'] ?? 0);
+
+                        if ($sku === '' || $quantity <= 0) {
+                            continue;
+                        }
+
+                        $catalogProduct = DB::table('cloud_catalog_products')
+                            ->where('store_id', $store->store_row_id)
+                            ->where('sku', $sku)
+                            ->first();
+
+                        if (!$catalogProduct || !(bool) $catalogProduct->track_inventory) {
+                            continue;
+                        }
+
+                        $catalogVersion ??= $nextCatalogVersion();
+
+                        DB::table('cloud_catalog_products')
+                            ->where('id', $catalogProduct->id)
+                            ->update([
+                                'stock_on_hand' => max(0, (int) $catalogProduct->stock_on_hand + $quantity),
+                                'catalog_version' => $catalogVersion,
+                                'updated_at' => now(),
+                            ]);
+                    }
                 }
             }
 
