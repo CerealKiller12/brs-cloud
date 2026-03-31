@@ -39,7 +39,7 @@ class NativeSocialAuthController extends Controller
     {
         abort_unless(in_array($provider, self::SUPPORTED, true), 404);
 
-        $statePayload = $this->decodeState(trim((string) $request->query('state', '')), $provider);
+        $statePayload = $this->decodeState(trim((string) $request->input('state', '')), $provider);
         abort_unless(is_array($statePayload), 419, 'No pude validar el regreso seguro desde tu cuenta social. Intenta de nuevo.');
 
         $returnTo = (string) ($statePayload['return_to'] ?? '');
