@@ -1249,6 +1249,49 @@ $registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTe
         return redirect()->route('admin.clients.show', $tenant->id)->with('status', 'Subscripcion del cliente actualizada.');
     })->name('clients.subscription.update');
 
+
+    Route::post('/clients/{tenantId}/delete', function (Request $request, int $tenantId) {
+        $tenant = Tenant::query()->findOrFail($tenantId);
+
+        $payload = $request->validate([
+            'confirm_slug' => ['required', 'string', 'max:120'],
+        ]);
+
+        abort_unless(trim((string) $payload['confirm_slug']) === $tenant->slug, 422, 'Escribe el slug exacto del cliente para confirmar la eliminacion.');
+
+        DB::transaction(function () use ($tenant, $tenantId) {
+            $users = User::query()
+                ->where('tenant_id', $tenantId)
+                ->get(['id', 'email']);
+
+            $userIds = $users->pluck('id')->filter()->values();
+            $emails = $users->pluck('email')->filter()->values();
+
+            if ($userIds->isNotEmpty()) {
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', User::class)
+                    ->whereIn('tokenable_id', $userIds)
+                    ->delete();
+
+                DB::table('sessions')
+                    ->whereIn('user_id', $userIds)
+                    ->delete();
+            }
+
+            if ($emails->isNotEmpty()) {
+                DB::table('password_reset_tokens')
+                    ->whereIn('email', $emails)
+                    ->delete();
+            }
+
+            User::query()->where('tenant_id', $tenantId)->delete();
+            Device::query()->where('tenant_id', $tenantId)->delete();
+            $tenant->delete();
+        });
+
+        return redirect()->route('admin.clients.index')->with('status', 'Cliente eliminado permanentemente.');
+    })->name('clients.destroy');
+
     Route::get('/subscriptions', function (Request $request) use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions) {
         $filters = [
             'status' => trim((string) $request->query('status', '')),

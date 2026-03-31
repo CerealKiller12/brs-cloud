@@ -260,7 +260,8 @@
         }
         .field { margin-bottom: 16px; }
         .button,
-        .button-secondary {
+        .button-secondary,
+        .button-danger {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -279,6 +280,11 @@
             background: var(--soft);
             color: #3d566d;
             border: 1px solid var(--line);
+        }
+        .button-danger {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid var(--danger-line);
         }
         .notice {
             padding: 16px 20px;

@@ -128,6 +128,28 @@
     </article>
 </section>
 
+<section class="card" style="border-color: #f6c9bf;">
+    <div class="toolbar">
+        <div>
+            <small class="eyebrow">Zona delicada</small>
+            <h3>Eliminar cliente</h3>
+        </div>
+    </div>
+
+    <div class="notice danger" style="margin-bottom: 18px;">
+        Esto elimina permanentemente el negocio, sus usuarios cloud, dispositivos vinculados, sesiones activas y datos sincronizados asociados a este tenant.
+    </div>
+
+    <form method="POST" action="{{ route('admin.clients.destroy', $tenant->id) }}" onsubmit="return confirm('Esta accion elimina permanentemente al cliente {{ addslashes($tenant->name) }}. ¿Continuar?');">
+        @csrf
+        <div class="field">
+            <label for="confirm_slug">Escribe el slug del cliente para confirmar</label>
+            <input id="confirm_slug" name="confirm_slug" placeholder="{{ $tenant->slug }}" required>
+        </div>
+        <button class="button-danger" type="submit">Eliminar cliente</button>
+    </form>
+</section>
+
 <section class="grid-2">
     <article class="card">
         <div class="toolbar">
