@@ -924,7 +924,7 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request 
     ]);
 });
 
-Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Request $request) {
+Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Request $request) use ($generateStoreCode) {
     $user = $request->user();
     abort_unless($user instanceof User && $user->is_active, 403, 'No pude autenticar tu cuenta cloud.');
 
