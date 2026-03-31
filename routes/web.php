@@ -1462,51 +1462,136 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
     Route::get('/onboarding', function () {
         /** @var User $user */
         $user = Auth::user();
-        $tenant = Tenant::query()->findOrFail($user->tenant_id);
+        $tenant = $user->tenant_id ? Tenant::query()->find($user->tenant_id) : null;
 
-        if ($tenant->onboarding_completed_at) {
+        if ($tenant?->onboarding_completed_at) {
             return redirect()->route('dashboard');
         }
 
-        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
-        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+        $store = $tenant
+            ? ($user->store_id
+                ? Store::query()->where('tenant_id', $tenant->id)->find($user->store_id)
+                : Store::query()->where('tenant_id', $tenant->id)->orderBy('id')->first())
+            : null;
+        $branding = is_array($store?->branding_json) ? $store->branding_json : (json_decode($store?->branding_json ?? '[]', true) ?: []);
+        $needsBusinessSetup = ! $tenant;
 
-        return view('onboarding', compact('user', 'tenant', 'store', 'branding'));
+        return view('onboarding', compact('user', 'tenant', 'store', 'branding', 'needsBusinessSetup'));
     })->name('onboarding.index');
 
     Route::post('/onboarding', function (Request $request) {
         /** @var User $user */
         $user = Auth::user();
-        $tenant = Tenant::query()->findOrFail($user->tenant_id);
-        $store = Store::query()->where('tenant_id', $user->tenant_id)->findOrFail($user->store_id);
-        $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
+        $tenant = $user->tenant_id ? Tenant::query()->find($user->tenant_id) : null;
+        $store = $tenant
+            ? ($user->store_id
+                ? Store::query()->where('tenant_id', $tenant->id)->find($user->store_id)
+                : Store::query()->where('tenant_id', $tenant->id)->orderBy('id')->first())
+            : null;
 
         $payload = $request->validate([
             'tenant_name' => ['required', 'string', 'max:120'],
-            'business_name' => ['required', 'string', 'max:160'],
             'store_name' => ['required', 'string', 'max:120'],
             'terminal_name' => ['required', 'string', 'max:120'],
             'timezone' => ['required', 'string', 'max:60'],
             'owner_name' => ['required', 'string', 'max:120'],
         ]);
 
-        $tenant->update([
-            'name' => $payload['tenant_name'],
-            'onboarding_completed_at' => now(),
-        ]);
+        $defaultRoleAccess = [
+            'admin' => [
+                'checkout' => true,
+                'sales' => true,
+                'cash' => true,
+                'products' => true,
+                'users' => true,
+                'settings' => true,
+                'updates' => true,
+            ],
+            'supervisor' => [
+                'checkout' => true,
+                'sales' => true,
+                'cash' => true,
+                'products' => true,
+                'users' => false,
+                'settings' => false,
+                'updates' => false,
+            ],
+            'cashier' => [
+                'checkout' => true,
+                'sales' => true,
+                'cash' => true,
+                'products' => false,
+                'users' => false,
+                'settings' => false,
+                'updates' => false,
+            ],
+        ];
 
-        $branding['business_name'] = $payload['business_name'];
-        $branding['terminal_name'] = $payload['terminal_name'];
+        DB::transaction(function () use ($user, $payload, $defaultRoleAccess, &$tenant, &$store) {
+            if (! $tenant) {
+                $tenantSlugBase = Str::slug(trim($payload['tenant_name'])) ?: 'venpi-cloud';
+                $tenantSlug = $tenantSlugBase;
+                $counter = 1;
 
-        $store->update([
-            'name' => $payload['store_name'],
-            'timezone' => $payload['timezone'],
-            'branding_json' => $branding,
-        ]);
+                while (Tenant::query()->where('slug', $tenantSlug)->exists()) {
+                    $counter++;
+                    $tenantSlug = $tenantSlugBase.'-'.$counter;
+                }
 
-        $user->update([
-            'name' => $payload['owner_name'],
-        ]);
+                $tenant = Tenant::query()->create([
+                    'name' => trim($payload['tenant_name']),
+                    'slug' => $tenantSlug,
+                    'plan_code' => 'starter',
+                    'subscription_status' => 'trialing',
+                    'is_active' => true,
+                    'trial_ends_at' => now()->addDays(14),
+                ]);
+            }
+
+            $branding = is_array($store?->branding_json) ? $store->branding_json : (json_decode($store?->branding_json ?? '[]', true) ?: []);
+            $branding['business_name'] = trim($payload['tenant_name']);
+            $branding['terminal_name'] = trim($payload['terminal_name']);
+
+            if (! $store) {
+                $baseCode = 'MATRIZ-001-'.$tenant->id;
+                $code = $baseCode;
+                $counter = 1;
+
+                while (Store::query()->where('code', $code)->exists()) {
+                    $counter++;
+                    $code = $baseCode.'-'.$counter;
+                }
+
+                $store = Store::query()->create([
+                    'tenant_id' => $tenant->id,
+                    'name' => trim($payload['store_name']),
+                    'code' => $code,
+                    'timezone' => trim($payload['timezone']) ?: 'America/Tijuana',
+                    'api_key' => bin2hex(random_bytes(16)),
+                    'catalog_version' => 1,
+                    'is_active' => true,
+                    'branding_json' => $branding,
+                    'role_access_json' => $defaultRoleAccess,
+                ]);
+            } else {
+                $store->update([
+                    'name' => trim($payload['store_name']),
+                    'timezone' => trim($payload['timezone']) ?: 'America/Tijuana',
+                    'branding_json' => $branding,
+                ]);
+            }
+
+            $tenant->update([
+                'name' => trim($payload['tenant_name']),
+                'onboarding_completed_at' => now(),
+            ]);
+
+            $user->update([
+                'name' => trim($payload['owner_name']),
+                'tenant_id' => $tenant->id,
+                'store_id' => $store->id,
+            ]);
+        });
 
         return redirect()->route('dashboard')->with('status', 'Configuracion inicial completada.');
     })->name('onboarding.store');

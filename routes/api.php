@@ -3,9 +3,11 @@
 use App\Http\Controllers\Auth\NativeSocialAuthController;
 use App\Models\Device;
 use App\Models\Store;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -878,7 +880,13 @@ Route::middleware('auth:sanctum')->post('/auth/logout', function (Request $reque
 
 Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request $request) {
     $user = $request->user();
-    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+    abort_unless($user instanceof User, 403, 'No pude autenticar tu cuenta cloud.');
+
+    if (! $user->tenant_id) {
+        return response()->json([
+            'items' => [],
+        ]);
+    }
 
     $stores = DB::table('stores')
         ->where('tenant_id', $user->tenant_id)
@@ -896,62 +904,136 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request 
     ]);
 });
 
-Route::middleware('auth:sanctum')->get('/cloud/admin/dashboard-summary', function (Request $request) use ($buildDashboardSummaryForStore) {
-    /** @var User $user */
+Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Request $request) {
     $user = $request->user();
-    abort_unless($user instanceof User && $user->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+    abort_unless($user instanceof User && $user->is_active, 403, 'No pude autenticar tu cuenta cloud.');
 
-    $storeId = $request->integer('store_id') ?: $user->store_id;
-    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar el resumen.');
+    $payload = $request->validate([
+        'tenant_name' => ['required', 'string', 'max:120'],
+        'business_name' => ['nullable', 'string', 'max:160'],
+        'store_name' => ['required', 'string', 'max:120'],
+        'terminal_name' => ['required', 'string', 'max:120'],
+        'timezone' => ['required', 'string', 'max:60'],
+    ]);
 
-    $exists = DB::table('stores')
-        ->where('tenant_id', $user->tenant_id)
-        ->where('id', $storeId)
-        ->exists();
+    $defaultRoleAccess = [
+        'admin' => [
+            'checkout' => true,
+            'sales' => true,
+            'cash' => true,
+            'products' => true,
+            'users' => true,
+            'settings' => true,
+            'updates' => true,
+        ],
+        'supervisor' => [
+            'checkout' => true,
+            'sales' => true,
+            'cash' => true,
+            'products' => true,
+            'users' => false,
+            'settings' => false,
+            'updates' => false,
+        ],
+        'cashier' => [
+            'checkout' => true,
+            'sales' => true,
+            'cash' => true,
+            'products' => false,
+            'users' => false,
+            'settings' => false,
+            'updates' => false,
+        ],
+    ];
 
-    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+    [$tenant, $store] = DB::transaction(function () use ($user, $payload, $defaultRoleAccess) {
+        $tenant = $user->tenant_id ? Tenant::query()->find($user->tenant_id) : null;
+        $store = $tenant
+            ? ($user->store_id
+                ? Store::query()->where('tenant_id', $tenant->id)->find($user->store_id)
+                : Store::query()->where('tenant_id', $tenant->id)->orderBy('id')->first())
+            : null;
 
-    return response()->json($buildDashboardSummaryForStore((int) $user->tenant_id, (int) $storeId));
-});
+        if (! $tenant) {
+            $tenantSlugBase = Str::slug(trim($payload['tenant_name'])) ?: 'venpi-cloud';
+            $tenantSlug = $tenantSlugBase;
+            $counter = 1;
 
-Route::middleware('auth:sanctum')->get('/cloud/admin/recent-sales', function (Request $request) use ($buildCloudRecentSalesForStore) {
-    /** @var User $user */
-    $requestUser = $request->user();
-    abort_unless($requestUser instanceof User && $requestUser->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+            while (Tenant::query()->where('slug', $tenantSlug)->exists()) {
+                $counter++;
+                $tenantSlug = $tenantSlugBase.'-'.$counter;
+            }
 
-    $storeId = $request->integer('store_id') ?: $requestUser->store_id;
-    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar las ventas.');
+            $tenant = Tenant::query()->create([
+                'name' => trim($payload['tenant_name']),
+                'slug' => $tenantSlug,
+                'plan_code' => 'starter',
+                'subscription_status' => 'trialing',
+                'is_active' => true,
+                'trial_ends_at' => now()->addDays(14),
+            ]);
+        }
 
-    $exists = DB::table('stores')
-        ->where('tenant_id', $requestUser->tenant_id)
-        ->where('id', $storeId)
-        ->exists();
+        $branding = is_array($store?->branding_json) ? $store->branding_json : (json_decode($store?->branding_json ?? '[]', true) ?: []);
+        $branding['business_name'] = trim((string) ($payload['business_name'] ?? '')) ?: trim($payload['tenant_name']);
+        $branding['terminal_name'] = trim($payload['terminal_name']);
 
-    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+        if (! $store) {
+            $baseCode = 'MATRIZ-001-'.$tenant->id;
+            $code = $baseCode;
+            $counter = 1;
 
-    return response()->json(
-        $buildCloudRecentSalesForStore((int) $requestUser->tenant_id, (int) $storeId, $request->string('search')->toString())
-    );
-});
+            while (Store::query()->where('code', $code)->exists()) {
+                $counter++;
+                $code = $baseCode.'-'.$counter;
+            }
 
-Route::middleware('auth:sanctum')->get('/cloud/admin/sales/{saleId}', function (Request $request, string $saleId) use ($buildCloudSaleDetailForStore) {
-    /** @var User $user */
-    $requestUser = $request->user();
-    abort_unless($requestUser instanceof User && $requestUser->tenant_id, 403, 'No pude autenticar tu cuenta cloud.');
+            $store = Store::query()->create([
+                'tenant_id' => $tenant->id,
+                'name' => trim($payload['store_name']),
+                'code' => $code,
+                'timezone' => trim($payload['timezone']) ?: 'America/Tijuana',
+                'api_key' => bin2hex(random_bytes(16)),
+                'catalog_version' => 1,
+                'is_active' => true,
+                'branding_json' => $branding,
+                'role_access_json' => $defaultRoleAccess,
+            ]);
+        } else {
+            $store->update([
+                'name' => trim($payload['store_name']),
+                'timezone' => trim($payload['timezone']) ?: 'America/Tijuana',
+                'branding_json' => $branding,
+            ]);
+        }
 
-    $storeId = $request->integer('store_id') ?: $requestUser->store_id;
-    abort_unless($storeId, 422, 'Debes elegir una sucursal para cargar el ticket.');
+        $tenant->update([
+            'name' => trim($payload['tenant_name']),
+            'onboarding_completed_at' => now(),
+        ]);
 
-    $exists = DB::table('stores')
-        ->where('tenant_id', $requestUser->tenant_id)
-        ->where('id', $storeId)
-        ->exists();
+        $user->update([
+            'tenant_id' => $tenant->id,
+            'store_id' => $store->id,
+        ]);
 
-    abort_unless($exists, 404, 'No pude encontrar esa sucursal en tu cuenta cloud.');
+        return [$tenant, $store];
+    });
 
-    return response()->json(
-        $buildCloudSaleDetailForStore((int) $requestUser->tenant_id, (int) $storeId, $saleId)
-    );
+    return response()->json([
+        'tenant' => [
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'slug' => $tenant->slug,
+        ],
+        'store' => [
+            'id' => $store->id,
+            'name' => $store->name,
+            'code' => $store->code,
+            'catalogVersion' => (int) $store->catalog_version,
+            'isActive' => (bool) $store->is_active,
+        ],
+    ], 201);
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) {

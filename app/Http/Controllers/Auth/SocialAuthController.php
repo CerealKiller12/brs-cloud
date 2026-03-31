@@ -3,13 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\Store;
-use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
@@ -51,8 +48,8 @@ class SocialAuthController extends Controller
                 ->first();
 
             if (! $user) {
-                abort_if(! $email, 422, 'Apple no devolvio correo. Vuelve a intentar y comparte tu email con la app la primera vez.');
-                $user = $this->provisionOwnerFromSocialUser(
+                abort_if(! $email, 422, 'La cuenta social no devolvio correo. Vuelve a intentar con una cuenta que comparta email.');
+                $user = $this->provisionAccountFromSocialUser(
                     $provider,
                     $socialUser->getId(),
                     $email,
@@ -139,11 +136,6 @@ class SocialAuthController extends Controller
             return '';
         }
 
-        $parts = parse_url($returnTo);
-        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        $path = '/'.ltrim((string) ($parts['path'] ?? ''), '/');
-
         return trim($returnTo);
     }
 
@@ -172,7 +164,7 @@ class SocialAuthController extends Controller
         return redirect()->away($returnTo.$separator.http_build_query($filtered));
     }
 
-    private function provisionOwnerFromSocialUser(
+    private function provisionAccountFromSocialUser(
         string $provider,
         string $providerId,
         string $email,
@@ -180,84 +172,17 @@ class SocialAuthController extends Controller
         ?string $avatarUrl,
     ): User {
         $displayName = trim($name ?: Str::before($email, '@')) ?: 'Owner';
-        $businessName = trim($displayName).' Retail';
-        $tenantSlugBase = Str::slug($businessName) ?: 'venpi-cloud';
-        $tenantSlug = $tenantSlugBase;
-        $counter = 1;
 
-        while (Tenant::query()->where('slug', $tenantSlug)->exists()) {
-            $counter++;
-            $tenantSlug = $tenantSlugBase.'-'.$counter;
-        }
-
-        $defaultRoleAccess = [
-            'admin' => [
-                'checkout' => true,
-                'sales' => true,
-                'cash' => true,
-                'products' => true,
-                'users' => true,
-                'settings' => true,
-                'updates' => true,
-            ],
-            'supervisor' => [
-                'checkout' => true,
-                'sales' => true,
-                'cash' => true,
-                'products' => true,
-                'users' => false,
-                'settings' => false,
-                'updates' => false,
-            ],
-            'cashier' => [
-                'checkout' => true,
-                'sales' => true,
-                'cash' => true,
-                'products' => false,
-                'users' => false,
-                'settings' => false,
-                'updates' => false,
-            ],
-        ];
-
-        return DB::transaction(function () use ($provider, $providerId, $email, $displayName, $businessName, $avatarUrl, $tenantSlug, $defaultRoleAccess) {
-            $tenant = Tenant::query()->create([
-                'name' => $businessName,
-                'slug' => $tenantSlug,
-                'plan_code' => 'starter',
-                'subscription_status' => 'trialing',
-                'is_active' => true,
-                'trial_ends_at' => now()->addDays(14),
-            ]);
-
-            $store = Store::query()->create([
-                'tenant_id' => $tenant->id,
-                'name' => 'Caja principal',
-                'code' => 'MATRIZ-001-'.$tenant->id,
-                'timezone' => 'America/Tijuana',
-                'api_key' => bin2hex(random_bytes(16)),
-                'catalog_version' => 1,
-                'is_active' => true,
-                'branding_json' => [
-                    'business_name' => $businessName,
-                    'terminal_name' => 'Caja principal',
-                ],
-                'role_access_json' => $defaultRoleAccess,
-            ]);
-
-            return User::query()->create([
-                'tenant_id' => $tenant->id,
-                'store_id' => $store->id,
-                'name' => $displayName,
-                'email' => $email,
-                'password' => Str::password(32),
-                'role' => 'owner',
-                'is_active' => true,
-                'email_verified_at' => now(),
-                'google_id' => $provider === 'google' ? $providerId : null,
-                'apple_id' => $provider === 'apple' ? $providerId : null,
-                'avatar_url' => $avatarUrl,
-            ]);
-        });
+        return User::query()->create([
+            'name' => $displayName,
+            'email' => $email,
+            'password' => Str::password(32),
+            'role' => 'owner',
+            'is_active' => true,
+            'email_verified_at' => now(),
+            'google_id' => $provider === 'google' ? $providerId : null,
+            'apple_id' => $provider === 'apple' ? $providerId : null,
+            'avatar_url' => $avatarUrl,
+        ]);
     }
 }
