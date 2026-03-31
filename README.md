@@ -228,7 +228,7 @@ Authorization: Bearer <token>
 
 ```http
 POST /api/cloud/device-token
-X-VENPI-Store-Code: MATRIZ-001
+X-VENPI-Store-Code: SUCURSAL-PRINCIPAL
 X-VENPI-Store-Key: venpi_demo_store_key_001
 ```
 
@@ -287,7 +287,7 @@ Authorization: Bearer <device-token>
 El seeder crea:
 
 - tenant demo: `Venpi Demo`
-- store demo: `MATRIZ-001`
+- store demo: `SUCURSAL-PRINCIPAL`
 - api key demo: `brs_demo_store_key_001`
 - catálogo demo inicial
 - usuario owner demo: `owner@bajaretailsystem.demo`

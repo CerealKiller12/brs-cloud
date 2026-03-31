@@ -14,6 +14,26 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Illuminate\Validation\Rule;
 
+$generateStoreCode = function (string $name): string {
+    $baseCode = trim(Str::upper(Str::slug(trim($name), '-')), '-');
+
+    if ($baseCode === '') {
+        $baseCode = 'SUCURSAL';
+    }
+
+    $baseCode = Str::limit($baseCode, 52, '');
+    $code = $baseCode;
+    $counter = 1;
+
+    while (Store::query()->where('code', $code)->exists()) {
+        $counter++;
+        $suffix = '-'.$counter;
+        $code = Str::limit($baseCode, 60 - strlen($suffix), '').$suffix;
+    }
+
+    return $code;
+};
+
 $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
     abort_unless($user->tenant_id, 403, 'Esta cuenta todavia no tiene un negocio asignado.');
 
@@ -1527,7 +1547,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ],
         ];
 
-        DB::transaction(function () use ($user, $payload, $defaultRoleAccess, &$tenant, &$store) {
+        DB::transaction(function () use ($user, $payload, $defaultRoleAccess, $generateStoreCode, &$tenant, &$store) {
             if (! $tenant) {
                 $tenantSlugBase = Str::slug(trim($payload['tenant_name'])) ?: 'venpi-cloud';
                 $tenantSlug = $tenantSlugBase;
@@ -1553,14 +1573,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             $branding['terminal_name'] = trim($payload['terminal_name']);
 
             if (! $store) {
-                $baseCode = 'MATRIZ-001-'.$tenant->id;
-                $code = $baseCode;
-                $counter = 1;
-
-                while (Store::query()->where('code', $code)->exists()) {
-                    $counter++;
-                    $code = $baseCode.'-'.$counter;
-                }
+                $code = $generateStoreCode($payload['store_name']);
 
                 $store = Store::query()->create([
                     'tenant_id' => $tenant->id,

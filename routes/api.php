@@ -26,6 +26,26 @@ $supportedPlatforms = [
     'android',
 ];
 
+$generateStoreCode = function (string $name): string {
+    $baseCode = trim(Str::upper(Str::slug(trim($name), '-')), '-');
+
+    if ($baseCode === '') {
+        $baseCode = 'SUCURSAL';
+    }
+
+    $baseCode = Str::limit($baseCode, 52, '');
+    $code = $baseCode;
+    $counter = 1;
+
+    while (Store::query()->where('code', $code)->exists()) {
+        $counter++;
+        $suffix = '-'.$counter;
+        $code = Str::limit($baseCode, 60 - strlen($suffix), '').$suffix;
+    }
+
+    return $code;
+};
+
 $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $initialCatalogVersion) {
     return response()->stream(function () use ($storeId, $storeCode, $initialCatalogVersion) {
         ignore_user_abort(true);
@@ -946,7 +966,7 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
         ],
     ];
 
-    [$tenant, $store] = DB::transaction(function () use ($user, $payload, $defaultRoleAccess) {
+    [$tenant, $store] = DB::transaction(function () use ($user, $payload, $defaultRoleAccess, $generateStoreCode) {
         $tenant = $user->tenant_id ? Tenant::query()->find($user->tenant_id) : null;
         $store = $tenant
             ? ($user->store_id
@@ -979,14 +999,7 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
         $branding['terminal_name'] = trim($payload['terminal_name']);
 
         if (! $store) {
-            $baseCode = 'MATRIZ-001-'.$tenant->id;
-            $code = $baseCode;
-            $counter = 1;
-
-            while (Store::query()->where('code', $code)->exists()) {
-                $counter++;
-                $code = $baseCode.'-'.$counter;
-            }
+            $code = $generateStoreCode($payload['store_name']);
 
             $store = Store::query()->create([
                 'tenant_id' => $tenant->id,
@@ -1036,7 +1049,7 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
     ], 201);
 });
 
-Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) {
+Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) use ($generateStoreCode) {
     $user = $request->user();
     abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
 
@@ -1048,14 +1061,7 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request
         'is_active' => ['nullable', 'boolean'],
     ]);
 
-    $baseCode = 'MATRIZ-001-'.$user->tenant_id;
-    $code = $baseCode;
-    $counter = 1;
-
-    while (Store::query()->where('code', $code)->exists()) {
-        $counter++;
-        $code = $baseCode.'-'.$counter;
-    }
+    $code = $generateStoreCode($payload['name']);
 
     $store = Store::query()->create([
         'tenant_id' => $user->tenant_id,

@@ -62,10 +62,10 @@ class DatabaseSeeder extends Seeder
         ];
 
         DB::table('stores')->updateOrInsert(
-            ['code' => 'MATRIZ-001'],
+            ['code' => 'SUCURSAL-PRINCIPAL'],
             [
                 'tenant_id' => $tenant->id,
-                'name' => 'Caja principal',
+                'name' => 'Sucursal principal',
                 'timezone' => 'America/Tijuana',
                 'api_key' => 'brs_demo_store_key_001',
                 'catalog_version' => 3,
@@ -80,7 +80,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $store = DB::table('stores')->where('code', 'MATRIZ-001')->first();
+        $store = DB::table('stores')->where('code', 'SUCURSAL-PRINCIPAL')->first();
 
         $catalogProducts = [
             ['sku' => 'SKU-0001', 'barcode' => '7501002010000', 'name' => 'Agua mineral 600ml', 'price_cents' => 1800, 'cost_cents' => 700, 'stock_on_hand' => 32, 'reorder_point' => 6],
