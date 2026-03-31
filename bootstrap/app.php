@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'cloud.surface' => \App\Http\Middleware\EnsureCloudSurface::class,
             'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class,
         ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'auth/apple/callback',
+            'auth/native/apple/callback',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
