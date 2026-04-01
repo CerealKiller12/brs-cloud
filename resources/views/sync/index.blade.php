@@ -182,7 +182,7 @@
     </article>
     <article class="stat">
         <div class="stat-label">Ultimo movimiento</div>
-        <div class="stat-value" style="font-size: 18px; line-height: 1.25;">{{ $syncStats['lastEventAt'] ? \Carbon\Carbon::parse($syncStats['lastEventAt'])->format('M j, Y · g:i A') : 'Sin eventos' }}</div>
+        <div class="stat-value" style="font-size: 18px; line-height: 1.25;">{{ $syncStats['lastEventAtLocal']?->format('M j, Y · g:i A') ?? 'Sin eventos' }}</div>
         <div class="stat-note">lo mas reciente que entro a la nube</div>
     </article>
 </section>
@@ -305,7 +305,7 @@
                                 <p>{{ \Illuminate\Support\Str::limit($event->apply_error, 180) }}</p>
                             @elseif ($event->applied_at)
                                 <strong>Resultado</strong>
-                                <p>Este movimiento ya quedo reflejado en la nube el {{ \Carbon\Carbon::parse($event->applied_at)->format('M j, Y · g:i A') }}.</p>
+                                <p>Este movimiento ya quedo reflejado en la nube el {{ $event->applied_at_local?->format('M j, Y · g:i A') ?? 'sin hora disponible' }}.</p>
                             @else
                                 <strong>Estado</strong>
                                 <p>La nube ya lo recibio y sigue en espera de aplicarlo por completo.</p>
@@ -316,7 +316,7 @@
                     <div class="activity-side">
                         <div class="activity-stamp">
                             <strong style="display:block; color: var(--text); margin-bottom: 4px;">Recibido</strong>
-                            {{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}
+                            {{ $event->received_at_local?->format('M j, Y · g:i A') ?? 'Sin hora disponible' }}
                         </div>
                     </div>
                 </article>

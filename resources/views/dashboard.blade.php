@@ -587,7 +587,7 @@
                         <strong>{{ $event->event_label }}</strong>
                         <p>{{ $event->device_label }} · {{ $event->detail_label }}</p>
                     </div>
-                    <div class="feed-time">{{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</div>
+                    <div class="feed-time">{{ $event->displayed_at?->format('M j, Y · g:i A') ?? 'Sin horario' }}</div>
                 </div>
             @empty
                 <div class="empty">Aun no hay actividad reciente que mostrar en esta sucursal.</div>

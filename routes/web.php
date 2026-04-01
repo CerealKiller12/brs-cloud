@@ -60,6 +60,10 @@ $resolveStoreForUser = function (User $user, ?int $requestedStoreId = null) use 
     return $activeStore;
 };
 
+$normalizeStoreTimezone = function (?string $timezone): string {
+    return trim((string) $timezone) ?: 'America/Tijuana';
+};
+
 $normalizeCatalogModifiers = function ($value) {
     if (!is_array($value)) {
         return [];
@@ -175,6 +179,31 @@ $resolveCloudSaleOccurredAt = function (object $event, string $storeTimezone) {
     }
 };
 
+$parseCloudEventTimestampForStore = function ($value, string $storeTimezone) {
+    if (empty($value)) {
+        return null;
+    }
+
+    try {
+        return \Carbon\Carbon::parse($value)->setTimezone($storeTimezone);
+    } catch (\Throwable) {
+        return null;
+    }
+};
+
+$resolveSyncEventDisplayedAt = function (object $event, string $storeTimezone) use ($parseCloudEventTimestampForStore) {
+    return $parseCloudEventTimestampForStore($event->occurred_at ?? null, $storeTimezone)
+        ?? $parseCloudEventTimestampForStore($event->received_at ?? null, $storeTimezone);
+};
+
+$decorateSyncEventTimestamps = function (object $event, string $storeTimezone) use ($parseCloudEventTimestampForStore, $resolveSyncEventDisplayedAt) {
+    $event->displayed_at = $resolveSyncEventDisplayedAt($event, $storeTimezone);
+    $event->received_at_local = $parseCloudEventTimestampForStore($event->received_at ?? null, $storeTimezone);
+    $event->applied_at_local = $parseCloudEventTimestampForStore($event->applied_at ?? null, $storeTimezone);
+
+    return $event;
+};
+
 $extractCloudSaleId = function (array $payload, string $fallback = ''): string {
     return trim((string) ($payload['saleId'] ?? data_get($payload, 'sale.id', $fallback)));
 };
@@ -238,11 +267,11 @@ $buildEffectiveCloudSalesFromSyncEvents = function ($events, string $storeTimezo
         ->values();
 };
 
-$buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext, $buildEffectiveCloudSalesFromSyncEvents) {
+$buildBusinessDashboardData = function (User $user, Request $request) use ($buildStoreContext, $buildEffectiveCloudSalesFromSyncEvents, $decorateSyncEventTimestamps, $normalizeStoreTimezone) {
     $editId = $request->integer('edit');
     $tenantId = $user->tenant_id;
     [$activeStore] = $buildStoreContext($user);
-    $storeTimezone = trim((string) ($activeStore->timezone ?? '')) ?: 'America/Tijuana';
+    $storeTimezone = $normalizeStoreTimezone($activeStore->timezone ?? null);
     $now = now($storeTimezone);
     $todayStart = $now->copy()->startOfDay();
     $yesterdayStart = $todayStart->copy()->subDay();
@@ -284,6 +313,9 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         : null;
 
     $storeNames = $stores->pluck('name', 'id');
+    $storeTimezones = $stores
+        ->mapWithKeys(fn ($store) => [(int) $store->id => $normalizeStoreTimezone($store->timezone ?? null)])
+        ->all();
     $tenant = $tenantId ? DB::table('tenants')->where('id', $tenantId)->first() : null;
 
     $deviceMetaById = Device::query()
@@ -480,10 +512,10 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
         ->latest('received_at')
         ->limit(8)
         ->get()
-        ->map(function ($event) use ($storeNames) {
+        ->map(function ($event) use ($decorateSyncEventTimestamps, $storeNames, $storeTimezones) {
             $event->store_name = $storeNames[$event->store_id] ?? 'Sucursal';
 
-            return $event;
+            return $decorateSyncEventTimestamps($event, $storeTimezones[$event->store_id] ?? 'America/Tijuana');
         });
 
     $stats = [
@@ -1618,13 +1650,13 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return view('stores.index', $businessDashboard);
     })->name('dashboard');
 
-    Route::get('/store-dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $buildEffectiveCloudSalesFromSyncEvents) {
+    Route::get('/store-dashboard', function () use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $buildEffectiveCloudSalesFromSyncEvents, $decorateSyncEventTimestamps, $normalizeStoreTimezone) {
         /** @var User $user */
         $user = Auth::user();
         $tenantId = $user->tenant_id;
         $store = $resolveStoreForUser($user);
         $storeId = $store->id;
-        $storeTimezone = trim((string) ($store->timezone ?? '')) ?: 'America/Tijuana';
+        $storeTimezone = $normalizeStoreTimezone($store->timezone ?? null);
         $now = now($storeTimezone);
         $todayStart = $now->copy()->startOfDay();
         $yesterdayStart = $todayStart->copy()->subDay();
@@ -1891,7 +1923,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->get(['device_id', 'name', 'platform'])
             ->keyBy('device_id');
 
-        $recentEvents = $recentEvents->map(function ($event) use ($recentEventDeviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+        $recentEvents = $recentEvents->map(function ($event) use ($decorateSyncEventTimestamps, $recentEventDeviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $storeTimezone) {
             $deviceMeta = $recentEventDeviceMeta->get($event->device_id);
             $payload = json_decode($event->payload_json, true) ?: [];
             $event->device_label = $humanizeDeviceLabel($event->device_id, $deviceMeta->name ?? null, $deviceMeta->platform ?? null);
@@ -1899,7 +1931,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             $event->aggregate_label = $humanizeAggregateType($event->aggregate_type);
             $event->detail_label = $describeSyncEvent($event->event_type, $payload);
 
-            return $event;
+            return $decorateSyncEventTimestamps($event, $storeTimezone);
         });
 
         return view('dashboard', compact(
@@ -2128,7 +2160,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return redirect()->route('devices.index')->with('status', 'Se cerro el acceso vigente de esta caja.');
     })->name('devices.revoke-token');
 
-    Route::get('/sync', function (Request $request) use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+    Route::get('/sync', function (Request $request) use ($resolveStoreForUser, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $decorateSyncEventTimestamps, $normalizeStoreTimezone, $parseCloudEventTimestampForStore) {
         /** @var User $user */
         $user = Auth::user();
         $activeStore = $resolveStoreForUser($user);
@@ -2196,9 +2228,14 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $storeOptions = Store::query()
             ->where('tenant_id', $user->tenant_id)
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'timezone']);
 
         $storeNames = $storeOptions->pluck('name', 'id');
+        $storeTimezones = $storeOptions
+            ->mapWithKeys(fn ($store) => [(int) $store->id => $normalizeStoreTimezone($store->timezone ?? null)])
+            ->all();
+        $selectedStoreTimezone = $storeTimezones[$storeFilter] ?? $normalizeStoreTimezone($activeStore->timezone ?? null);
+        $syncStats['lastEventAtLocal'] = $parseCloudEventTimestampForStore($syncStats['lastEventAt'], $selectedStoreTimezone);
         $deviceMeta = Device::query()
             ->where('tenant_id', $user->tenant_id)
             ->whereIn('device_id', $events->getCollection()->pluck('device_id')->filter()->unique()->values())
@@ -2206,7 +2243,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             ->keyBy('device_id');
 
         $events->setCollection(
-            $events->getCollection()->map(function ($event) use ($storeNames, $deviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
+            $events->getCollection()->map(function ($event) use ($decorateSyncEventTimestamps, $storeNames, $storeTimezones, $deviceMeta, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent) {
                 $payload = json_decode($event->payload_json, true) ?: [];
                 $meta = $deviceMeta->get($event->device_id);
                 $event->store_name = $storeNames[$event->store_id] ?? 'Sucursal sin nombre';
@@ -2215,7 +2252,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 $event->aggregate_label = $humanizeAggregateType($event->aggregate_type);
                 $event->detail_label = $describeSyncEvent($event->event_type, $payload);
 
-                return $event;
+                return $decorateSyncEventTimestamps($event, $storeTimezones[$event->store_id] ?? 'America/Tijuana');
             })
         );
 
@@ -2267,27 +2304,9 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 ->max('updated_at'),
         ];
 
-        $catalogSuggestions = DB::table('cloud_catalog_products')
-            ->where('store_id', $store->id)
-            ->orderBy('name')
-            ->limit(80)
-            ->get(['name', 'sku', 'barcode'])
-            ->flatMap(function ($product) {
-                return collect([
-                    $product->name,
-                    $product->sku,
-                    $product->barcode,
-                ])->filter();
-            })
-            ->map(fn ($value) => trim((string) $value))
-            ->filter()
-            ->unique()
-            ->values();
-
         return view('catalog.index', [
             'catalog' => $catalog,
             'catalogStats' => $catalogStats,
-            'catalogSuggestions' => $catalogSuggestions,
             'store' => $store,
             'search' => $search,
             'transferStoreOptions' => $transferStoreOptions,

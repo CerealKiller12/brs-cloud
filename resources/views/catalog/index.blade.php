@@ -10,6 +10,7 @@
         display: grid;
         grid-template-columns: 1fr;
         gap: 18px;
+        align-items: start;
     }
     .catalog-editor {
         background:
@@ -18,8 +19,8 @@
     }
     .catalog-editor-body {
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
-        gap: 18px;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, .9fr);
+        gap: 16px;
         align-items: start;
     }
     .catalog-editor-section {
@@ -32,6 +33,14 @@
     }
     .catalog-section-head p {
         font-size: 14px;
+    }
+    .catalog-section-head--compact {
+        margin-top: 4px;
+    }
+    .catalog-editor-divider {
+        height: 1px;
+        background: linear-gradient(90deg, rgba(205, 183, 159, .72), rgba(205, 183, 159, 0));
+        margin: 2px 0;
     }
     .catalog-editor-fields {
         display: grid;
@@ -46,8 +55,11 @@
     }
     .catalog-editor-side {
         display: grid;
-        gap: 14px;
+        gap: 16px;
         align-content: start;
+    }
+    .catalog-editor-pricing .catalog-editor-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .catalog-toggle-card {
         display: grid;
@@ -81,6 +93,22 @@
     }
     .catalog-editor-actions .button {
         min-width: 180px;
+    }
+    .catalog-editor-actions-note {
+        max-width: 320px;
+    }
+    .catalog-editor-support {
+        display: grid;
+        gap: 16px;
+        align-content: start;
+        padding: 18px 20px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(249, 242, 233, .98) 0%, rgba(255,255,255,.96) 100%);
+    }
+    .catalog-editor-support .catalog-editor-actions {
+        padding-top: 6px;
+        border-top: 1px solid rgba(205, 183, 159, .4);
     }
     .catalog-editor-tips {
         display: grid;
@@ -140,9 +168,19 @@
         gap: 10px;
         align-items: center;
         flex-wrap: wrap;
+        justify-content: flex-end;
     }
     .catalog-search input {
-        min-width: 320px;
+        min-width: min(360px, 100%);
+        flex: 1 1 320px;
+    }
+    .catalog-search-actions {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .catalog-search-meta {
+        font-size: 13px;
     }
     .catalog-table-card {
         display: grid;
@@ -150,9 +188,6 @@
     }
     .catalog-table-card table {
         table-layout: fixed;
-    }
-    .catalog-row.is-hidden {
-        display: none;
     }
     .catalog-inline-input {
         width: 100%;
@@ -224,16 +259,6 @@
         background: #fff1ee;
         border-color: #e8c4bc;
         color: #ae4c3b;
-    }
-    .catalog-filter-empty {
-        display: none;
-        border: 1px dashed var(--line);
-        border-radius: 22px;
-        padding: 18px;
-        background: linear-gradient(180deg, rgba(255,255,255,.95) 0%, rgba(246,250,253,.92) 100%);
-    }
-    .catalog-filter-empty.is-visible {
-        display: block;
     }
     .catalog-modal-shell {
         position: fixed;
@@ -338,8 +363,24 @@
         .catalog-editor-fields {
             grid-template-columns: 1fr;
         }
+        .catalog-editor-pricing .catalog-editor-fields {
+            grid-template-columns: 1fr;
+        }
         .catalog-modifier-row {
             grid-template-columns: 1fr;
+        }
+        .catalog-search {
+            align-items: stretch;
+        }
+        .catalog-search-actions {
+            width: 100%;
+            justify-content: flex-start;
+        }
+        .catalog-editor-actions .button {
+            width: 100%;
+        }
+        .catalog-editor-actions-note {
+            max-width: none;
         }
     }
 </style>
@@ -360,7 +401,7 @@
     <section class="notice danger">{{ $errors->first() }}</section>
 @endif
 
-<section class="catalog-summary">
+<section class="catalog-summary" data-catalog-summary-scope>
     <article class="catalog-summary-card">
         <div class="stat-label">Productos</div>
         <div class="stat-value">{{ $catalogStats['total'] }}</div>
@@ -418,10 +459,25 @@
                                 <input id="name" name="name" value="{{ old('name') }}" placeholder="Ej. Pepsi 355 ml" required>
                             </div>
                         </div>
+
+                        <div class="catalog-editor-divider"></div>
+
+                        <div class="catalog-section-head catalog-section-head--compact">
+                            <small class="eyebrow">Modificadores</small>
+                            <p>Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</p>
+                        </div>
+
+                        <div class="field" style="margin-bottom: 0;">
+                            <input type="hidden" id="modifiers_text" name="modifiers_text" value="{{ old('modifiers_text') }}" data-modifier-hidden-input>
+                            <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='@json(old('modifiers_text', ''))'></div>
+                            <div class="catalog-modifier-tools">
+                                <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="catalog-editor-side">
-                        <div class="surface catalog-editor-section">
+                        <div class="surface catalog-editor-section catalog-editor-pricing">
                             <div class="catalog-section-head">
                                 <small class="eyebrow">Precio y stock</small>
                                 <p>Define lo comercial y lo operativo sin bajar hasta el final del formulario.</p>
@@ -444,19 +500,10 @@
                                     <label for="reorder_point">Punto de reorden</label>
                                     <input id="reorder_point" name="reorder_point" type="number" min="0" value="{{ old('reorder_point', 0) }}" required>
                                 </div>
-                                <div class="field catalog-field-span">
-                                    <label>Modificadores</label>
-                                    <input type="hidden" id="modifiers_text" name="modifiers_text" value="{{ old('modifiers_text') }}" data-modifier-hidden-input>
-                                    <div class="catalog-modifier-list" data-modifier-list data-modifier-seed='@json(old('modifiers_text', ''))'></div>
-                                    <div class="catalog-modifier-tools">
-                                        <button class="catalog-action secondary compact catalog-modifier-add" type="button" data-modifier-add>Agregar modificador</button>
-                                        <span class="muted" style="font-size: 13px;">Captura nombre y costo extra por separado. Si no lleva costo, dejalo en 0.</span>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
-                        <div class="surface catalog-toggle-card">
+                        <div class="catalog-editor-support">
                             <label class="catalog-toggle-control" for="track_inventory">
                                 <input id="track_inventory" name="track_inventory" type="checkbox" value="1" {{ old('track_inventory', true) ? 'checked' : '' }}>
                                 <div class="catalog-toggle-copy">
@@ -464,29 +511,29 @@
                                     <span>Activalo cuando quieras que existencias y alertas de reorden se reflejen entre cajas.</span>
                                 </div>
                             </label>
-                        </div>
 
-                        <div class="surface catalog-editor-tips">
-                            <div class="catalog-editor-tip">
-                                <strong>Alta mas rapida</strong>
-                                <span>SKU, nombre y precio son lo minimo para empezar a vender.</span>
+                            <div class="catalog-editor-tips">
+                                <div class="catalog-editor-tip">
+                                    <strong>Alta mas rapida</strong>
+                                    <span>SKU, nombre y precio son lo minimo para empezar a vender.</span>
+                                </div>
+                                <div class="catalog-editor-tip">
+                                    <strong>Mejor control</strong>
+                                    <span>Si registras costo y punto de reorden, la sucursal detecta faltantes antes.</span>
+                                </div>
                             </div>
-                            <div class="catalog-editor-tip">
-                                <strong>Mejor control</strong>
-                                <span>Si registras costo y punto de reorden, la sucursal detecta faltantes antes.</span>
-                            </div>
-                        </div>
 
-                        <div class="catalog-editor-actions">
-                            <span class="muted" style="font-size: 13px;">Se publica en esta sucursal y sus cajas conectadas.</span>
-                            <button class="button" type="submit">Crear producto</button>
+                            <div class="catalog-editor-actions">
+                                <span class="muted catalog-editor-actions-note" style="font-size: 13px;">Se publica en esta sucursal y sus cajas conectadas en cuanto guardes el producto.</span>
+                                <button class="button" type="submit">Crear producto</button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </form>
         </article>
 
-        <article class="card catalog-store-card">
+        <article class="card catalog-store-card" data-catalog-store-scope>
             <div class="catalog-store-overview">
                 <div>
                 <small class="eyebrow">Sucursal activa</small>
@@ -530,165 +577,162 @@
                 <h3>Productos disponibles en esta sucursal</h3>
                 <p class="muted" data-live-status style="margin-top: 6px;">Actualizacion automatica activa.</p>
             </div>
-            <form method="GET" action="{{ route('catalog.index') }}" class="catalog-search" onsubmit="return false;">
+            <form method="GET" action="{{ route('catalog.index') }}" class="catalog-search" data-catalog-search-form>
                 <input
                     name="q"
                     value="{{ $search }}"
                     placeholder="Buscar por nombre, SKU o codigo"
-                    list="catalog-suggestions"
                     data-catalog-filter-input
-                    autocomplete="off">
-                <datalist id="catalog-suggestions">
-                    @foreach ($catalogSuggestions as $suggestion)
-                        <option value="{{ $suggestion }}"></option>
-                    @endforeach
-                </datalist>
-                <span class="muted" style="font-size: 13px;">Se va filtrando mientras escribes.</span>
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false">
+                <div class="catalog-search-actions">
+                    <button class="catalog-action secondary compact" type="submit">Buscar</button>
+                    <button class="catalog-action secondary compact" type="button" data-catalog-clear-search>Limpiar</button>
+                </div>
+                <span class="muted catalog-search-meta">Busca en todo el catalogo compartido, no solo en esta pagina.</span>
             </form>
         </div>
 
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Stock</th>
-                    <th>Estado</th>
-                    <th>Version</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody data-catalog-rows>
-                @forelse ($catalog as $item)
-                    @php($isLowStock = (bool) $item->track_inventory && (int) $item->stock_on_hand <= (int) $item->reorder_point)
-                    @php($inlineFormId = 'quick-edit-'.$item->id)
-                    @php($priceValue = number_format($item->price_cents / 100, 2, '.', ''))
-                    @php($costValue = $item->cost_cents ? number_format($item->cost_cents / 100, 2, '.', '') : '')
-                    @php($modifiers = collect($item->modifiers ?? []))
-                    @php($modifiersText = $modifiers->map(fn ($modifier) => trim((string) ($modifier['name'] ?? '')).(((int) ($modifier['priceDeltaCents'] ?? 0)) > 0 ? '|'.number_format(((int) ($modifier['priceDeltaCents'] ?? 0)) / 100, 2, '.', '') : ''))->filter()->implode("\n"))
-                    <tr
-                        class="catalog-row"
-                        data-catalog-row
-                        data-search="{{ mb_strtolower(collect([$item->name, $item->sku, $item->barcode])->filter()->implode(' ')) }}"
-                        data-product-id="{{ $item->id }}"
-                        data-update-url="{{ route('catalog.update', $item->id) }}"
-                        data-sku="{{ $item->sku }}"
-                        data-barcode="{{ $item->barcode }}"
-                        data-name="{{ $item->name }}"
-                        data-price="{{ $priceValue }}"
-                        data-cost="{{ $costValue }}"
-                        data-stock="{{ $item->stock_on_hand }}"
-                        data-reorder="{{ $item->reorder_point }}"
-                        data-track="{{ $item->track_inventory ? 1 : 0 }}"
-                        data-active="{{ $item->is_active ? 1 : 0 }}"
-                        data-transfer-url="{{ route('catalog.transfer', $item->id) }}"
-                        data-modifiers-text='@json($modifiersText)'>
-                        <td>
-                            <input
-                                class="catalog-inline-input"
-                                form="{{ $inlineFormId }}"
-                                name="name"
-                                value="{{ $item->name }}"
-                                data-catalog-inline-input
-                                aria-label="Nombre del producto">
-                            <div class="catalog-meta">
-                                <span class="muted">{{ $item->sku }}{{ $item->barcode ? ' · '.$item->barcode : '' }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            <input
-                                class="catalog-inline-input compact"
-                                form="{{ $inlineFormId }}"
-                                name="price"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value="{{ $priceValue }}"
-                                data-catalog-inline-input
-                                aria-label="Precio">
-                            @if ($item->cost_cents)
+        <div data-catalog-results-scope>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Precio</th>
+                        <th>Stock</th>
+                        <th>Estado</th>
+                        <th>Version</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody data-catalog-rows>
+                    @forelse ($catalog as $item)
+                        @php($isLowStock = (bool) $item->track_inventory && (int) $item->stock_on_hand <= (int) $item->reorder_point)
+                        @php($inlineFormId = 'quick-edit-'.$item->id)
+                        @php($priceValue = number_format($item->price_cents / 100, 2, '.', ''))
+                        @php($costValue = $item->cost_cents ? number_format($item->cost_cents / 100, 2, '.', '') : '')
+                        @php($modifiers = collect($item->modifiers ?? []))
+                        @php($modifiersText = $modifiers->map(fn ($modifier) => trim((string) ($modifier['name'] ?? '')).(((int) ($modifier['priceDeltaCents'] ?? 0)) > 0 ? '|'.number_format(((int) ($modifier['priceDeltaCents'] ?? 0)) / 100, 2, '.', '') : ''))->filter()->implode("\n"))
+                        <tr
+                            class="catalog-row"
+                            data-catalog-row
+                            data-search="{{ mb_strtolower(collect([$item->name, $item->sku, $item->barcode])->filter()->implode(' ')) }}"
+                            data-product-id="{{ $item->id }}"
+                            data-update-url="{{ route('catalog.update', $item->id) }}"
+                            data-sku="{{ $item->sku }}"
+                            data-barcode="{{ $item->barcode }}"
+                            data-name="{{ $item->name }}"
+                            data-price="{{ $priceValue }}"
+                            data-cost="{{ $costValue }}"
+                            data-stock="{{ $item->stock_on_hand }}"
+                            data-reorder="{{ $item->reorder_point }}"
+                            data-track="{{ $item->track_inventory ? 1 : 0 }}"
+                            data-active="{{ $item->is_active ? 1 : 0 }}"
+                            data-transfer-url="{{ route('catalog.transfer', $item->id) }}"
+                            data-modifiers-text='@json($modifiersText)'>
+                            <td>
+                                <input
+                                    class="catalog-inline-input"
+                                    form="{{ $inlineFormId }}"
+                                    name="name"
+                                    value="{{ $item->name }}"
+                                    data-catalog-inline-input
+                                    aria-label="Nombre del producto">
                                 <div class="catalog-meta">
-                                    <span class="muted">Costo MX${{ number_format($item->cost_cents / 100, 2) }}</span>
+                                    <span class="muted">{{ $item->sku }}{{ $item->barcode ? ' · '.$item->barcode : '' }}</span>
                                 </div>
-                            @endif
-                        </td>
-                        <td>
-                            <input
-                                class="catalog-inline-input compact"
-                                form="{{ $inlineFormId }}"
-                                name="stock_on_hand"
-                                type="number"
-                                min="0"
-                                value="{{ $item->stock_on_hand }}"
-                                data-catalog-inline-input
-                                aria-label="Stock disponible">
-                            @if ($item->track_inventory)
-                                <div class="catalog-meta">
-                                    <span class="pill {{ $isLowStock ? 'danger stock-pill low' : '' }}">Reorden {{ $item->reorder_point }}</span>
-                                </div>
-                            @endif
-                        </td>
-                        <td><span class="pill {{ $item->is_active ? 'success' : '' }}">{{ $item->is_active ? 'Activo' : 'Pausado' }}</span></td>
-                        <td>v{{ $item->catalog_version }}</td>
-                        <td>
-                            <form id="{{ $inlineFormId }}" method="POST" action="{{ route('catalog.update', $item->id) }}" style="display:none;">
-                                @csrf
-                                @method('PUT')
-                                <input type="hidden" name="sku" value="{{ $item->sku }}">
-                                <input type="hidden" name="barcode" value="{{ $item->barcode }}">
-                                <input type="hidden" name="cost" value="{{ $costValue }}">
-                                <input type="hidden" name="reorder_point" value="{{ $item->reorder_point }}">
-                                <input type="hidden" name="track_inventory" value="{{ $item->track_inventory ? 1 : 0 }}">
-                                <input type="hidden" name="is_active" value="{{ $item->is_active ? 1 : 0 }}">
-                            </form>
-                            <div class="catalog-actions">
-                                <button class="catalog-action primary is-hidden" type="submit" form="{{ $inlineFormId }}" data-catalog-inline-save>Guardar</button>
-                                @if ($item->track_inventory && $transferStoreOptions->isNotEmpty())
+                            </td>
+                            <td>
+                                <input
+                                    class="catalog-inline-input compact"
+                                    form="{{ $inlineFormId }}"
+                                    name="price"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value="{{ $priceValue }}"
+                                    data-catalog-inline-input
+                                    aria-label="Precio">
+                                @if ($item->cost_cents)
+                                    <div class="catalog-meta">
+                                        <span class="muted">Costo MX${{ number_format($item->cost_cents / 100, 2) }}</span>
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
+                                <input
+                                    class="catalog-inline-input compact"
+                                    form="{{ $inlineFormId }}"
+                                    name="stock_on_hand"
+                                    type="number"
+                                    min="0"
+                                    value="{{ $item->stock_on_hand }}"
+                                    data-catalog-inline-input
+                                    aria-label="Stock disponible">
+                                @if ($item->track_inventory)
+                                    <div class="catalog-meta">
+                                        <span class="pill {{ $isLowStock ? 'danger stock-pill low' : '' }}">Reorden {{ $item->reorder_point }}</span>
+                                    </div>
+                                @endif
+                            </td>
+                            <td><span class="pill {{ $item->is_active ? 'success' : '' }}">{{ $item->is_active ? 'Activo' : 'Pausado' }}</span></td>
+                            <td>v{{ $item->catalog_version }}</td>
+                            <td>
+                                <form id="{{ $inlineFormId }}" method="POST" action="{{ route('catalog.update', $item->id) }}" style="display:none;">
+                                    @csrf
+                                    @method('PUT')
+                                    <input type="hidden" name="sku" value="{{ $item->sku }}">
+                                    <input type="hidden" name="barcode" value="{{ $item->barcode }}">
+                                    <input type="hidden" name="cost" value="{{ $costValue }}">
+                                    <input type="hidden" name="reorder_point" value="{{ $item->reorder_point }}">
+                                    <input type="hidden" name="track_inventory" value="{{ $item->track_inventory ? 1 : 0 }}">
+                                    <input type="hidden" name="is_active" value="{{ $item->is_active ? 1 : 0 }}">
+                                </form>
+                                <div class="catalog-actions">
+                                    <button class="catalog-action primary is-hidden" type="submit" form="{{ $inlineFormId }}" data-catalog-inline-save>Guardar</button>
+                                    @if ($item->track_inventory && $transferStoreOptions->isNotEmpty())
+                                        <button
+                                            class="catalog-action secondary compact"
+                                            type="button"
+                                            data-catalog-transfer-open
+                                            data-product-id="{{ $item->id }}">
+                                            Mover stock
+                                        </button>
+                                    @endif
                                     <button
                                         class="catalog-action secondary compact"
                                         type="button"
-                                        data-catalog-transfer-open
+                                        data-catalog-edit-open
                                         data-product-id="{{ $item->id }}">
-                                        Mover stock
+                                        Editar
                                     </button>
-                                @endif
-                                <button
-                                    class="catalog-action secondary compact"
-                                    type="button"
-                                    data-catalog-edit-open
-                                    data-product-id="{{ $item->id }}">
-                                    Editar
-                                </button>
-                                <form method="POST" action="{{ route('catalog.destroy', $item->id) }}" onsubmit="return confirm('Se eliminara {{ addslashes($item->name) }} del catalogo cloud. ¿Continuar?')">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button
-                                        class="catalog-action danger compact"
-                                        type="submit"
-                                        aria-label="Eliminar producto"
-                                        title="Eliminar producto">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; fill: currentColor;">
-                                            <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v8H8V9Zm6 0h2v8h-2V9ZM7 9h10l-.8 10.2A2 2 0 0 1 14.2 21H9.8a2 2 0 0 1-1.99-1.8L7 9Z" />
-                                        </svg>
-                                    </button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="6"><div class="empty" data-catalog-empty>No encontramos productos con ese criterio. Prueba con otro nombre, SKU o codigo.</div></td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
+                                    <form method="POST" action="{{ route('catalog.destroy', $item->id) }}" onsubmit="return confirm('Se eliminara {{ addslashes($item->name) }} del catalogo cloud. ¿Continuar?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button
+                                            class="catalog-action danger compact"
+                                            type="submit"
+                                            aria-label="Eliminar producto"
+                                            title="Eliminar producto">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; fill: currentColor;">
+                                                <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v8H8V9Zm6 0h2v8h-2V9ZM7 9h10l-.8 10.2A2 2 0 0 1 14.2 21H9.8a2 2 0 0 1-1.99-1.8L7 9Z" />
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6"><div class="empty" data-catalog-empty>No encontramos productos con ese criterio. Prueba con otro nombre, SKU o codigo.</div></td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
 
-        <div class="catalog-filter-empty" data-catalog-filter-empty>
-            <strong style="display:block; margin-bottom: 6px;">No encontramos coincidencias en esta pagina.</strong>
-            <span class="muted">Prueba con otra palabra, SKU o codigo para ubicar el producto mas rapido.</span>
+            <div class="pagination">{{ $catalog->links() }}</div>
         </div>
-
-        <div class="pagination">{{ $catalog->links() }}</div>
     </section>
 </section>
 
@@ -818,14 +862,21 @@
     let currentVersion = Number(root.dataset.catalogVersion || '0');
     const eventsUrl = root.dataset.eventsUrl || '';
     const liveStatus = root.querySelector('[data-live-status]');
-    const filterInput = document.querySelector('[data-catalog-filter-input]');
-    const rows = Array.from(root.querySelectorAll('[data-catalog-row]'));
+    const searchForm = root.querySelector('[data-catalog-search-form]');
+    const filterInput = searchForm?.querySelector('[data-catalog-filter-input]') ?? null;
+    const clearSearchButton = searchForm?.querySelector('[data-catalog-clear-search]') ?? null;
+    const resultsScope = root.querySelector('[data-catalog-results-scope]');
     const modal = document.querySelector('[data-catalog-modal]');
     const modalForm = document.querySelector('[data-catalog-modal-form]');
     const transferModal = document.querySelector('[data-catalog-transfer-modal]');
     const transferForm = document.querySelector('[data-catalog-transfer-form]');
-    const filterEmpty = root.querySelector('[data-catalog-filter-empty]');
+    let summaryScope = document.querySelector('[data-catalog-summary-scope]');
+    let storeScope = document.querySelector('[data-catalog-store-scope]');
     let source = null;
+    let searchTimer = null;
+    let fetchController = null;
+    let fetchSequence = 0;
+    let pendingVersion = null;
 
     const modifierContainers = Array.from(document.querySelectorAll('[data-modifier-list]'));
 
@@ -910,6 +961,164 @@
         }
     };
 
+    const buildCatalogUrl = (overrides = {}) => {
+        const current = new URL(window.location.href);
+        const action = searchForm?.getAttribute('action') || current.pathname;
+        const url = new URL(action, current.origin);
+        url.search = current.search;
+
+        if (Object.prototype.hasOwnProperty.call(overrides, 'q')) {
+            const query = String(overrides.q || '').trim();
+            if (query === '') {
+                url.searchParams.delete('q');
+            } else {
+                url.searchParams.set('q', query);
+            }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(overrides, 'page')) {
+            const page = Number(overrides.page || 0);
+            if (page > 1) {
+                url.searchParams.set('page', String(page));
+            } else {
+                url.searchParams.delete('page');
+            }
+        }
+
+        return url;
+    };
+
+    const replaceFragment = (selector, doc) => {
+        const current = document.querySelector(selector);
+        const next = doc.querySelector(selector);
+
+        if (!current || !next) {
+            return;
+        }
+
+        current.replaceWith(next);
+    };
+
+    const getCatalogRows = () => Array.from(root.querySelectorAll('[data-catalog-row]'));
+
+    const hasDirtyInlineRows = () => Array.from(root.querySelectorAll('[data-catalog-inline-save]'))
+        .some((button) => !button.classList.contains('is-hidden'));
+
+    const canApplyLiveRefresh = () => {
+        return !hasDirtyInlineRows()
+            && !modal?.classList.contains('is-open')
+            && !transferModal?.classList.contains('is-open');
+    };
+
+    const applyPendingRefreshIfNeeded = () => {
+        if (!pendingVersion || !canApplyLiveRefresh()) {
+            return;
+        }
+
+        const nextVersion = pendingVersion;
+        pendingVersion = null;
+        void refreshCatalogView(buildCatalogUrl(), {
+            updateMeta: true,
+            statusText: `Aplicando cambios del catalogo v${nextVersion}...`,
+        });
+    };
+
+    const renderCatalogResults = (doc) => {
+        if (!resultsScope) {
+            return;
+        }
+
+        const nextResults = doc.querySelector('[data-catalog-results-scope]');
+        const nextRoot = doc.querySelector('[data-cloud-catalog-live]');
+
+        if (nextResults) {
+            resultsScope.innerHTML = nextResults.innerHTML;
+        }
+
+        if (nextRoot) {
+            const nextVersion = Number(nextRoot.dataset.catalogVersion || currentVersion);
+            if (Number.isFinite(nextVersion) && nextVersion > 0) {
+                currentVersion = nextVersion;
+                root.dataset.catalogVersion = String(nextVersion);
+            }
+        }
+
+        syncInlineDirtyStates();
+    };
+
+    const refreshCatalogView = async (url, { updateMeta = false, statusText = 'Actualizando catalogo...' } = {}) => {
+        const requestId = ++fetchSequence;
+
+        if (fetchController) {
+            fetchController.abort();
+        }
+
+        fetchController = new AbortController();
+        setStatus(statusText);
+
+        try {
+            const response = await fetch(url.toString(), {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                signal: fetchController.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Catalog request failed with ${response.status}`);
+            }
+
+            const html = await response.text();
+
+            if (requestId !== fetchSequence) {
+                return;
+            }
+
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+
+            if (updateMeta) {
+                replaceFragment('[data-catalog-summary-scope]', doc);
+                replaceFragment('[data-catalog-store-scope]', doc);
+                summaryScope = document.querySelector('[data-catalog-summary-scope]');
+                storeScope = document.querySelector('[data-catalog-store-scope]');
+            }
+
+            renderCatalogResults(doc);
+            window.history.replaceState({}, '', url.toString());
+
+            const query = filterInput?.value.trim() || '';
+            setStatus(query !== ''
+                ? `Mostrando resultados de "${query}" en todo el catalogo.`
+                : `Catalogo al dia en v${currentVersion}.`);
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return;
+            }
+
+            setStatus('No pude refrescar el catalogo sin salir de la pagina.');
+        } finally {
+            if (requestId === fetchSequence) {
+                fetchController = null;
+            }
+        }
+    };
+
+    const submitCatalogSearch = () => {
+        const query = filterInput?.value.trim() || '';
+
+        return refreshCatalogView(buildCatalogUrl({
+            q: query,
+            page: 0,
+        }), {
+            updateMeta: false,
+            statusText: query !== ''
+                ? 'Buscando en todo el catalogo compartido...'
+                : 'Recargando el catalogo completo...',
+        });
+    };
+
     const connect = () => {
         if (!eventsUrl || typeof EventSource === 'undefined') {
             setStatus('Actualizacion automatica no disponible en este navegador.');
@@ -928,46 +1137,37 @@
             const nextVersion = Number(payload.catalogVersion || 0);
 
             if (nextVersion > currentVersion) {
-                setStatus(`Aplicando cambios del catalogo v${nextVersion}...`);
-                window.location.reload();
+                if (!canApplyLiveRefresh()) {
+                    pendingVersion = Math.max(pendingVersion || 0, nextVersion);
+                    setStatus(`Hay cambios nuevos en el catalogo v${nextVersion}. Termina tu edicion para sincronizar sin recargar.`);
+                    return;
+                }
+
+                void refreshCatalogView(buildCatalogUrl(), {
+                    updateMeta: true,
+                    statusText: `Aplicando cambios del catalogo v${nextVersion}...`,
+                });
                 return;
             }
 
-            currentVersion = nextVersion;
+            if (Number.isFinite(nextVersion) && nextVersion > 0) {
+                currentVersion = nextVersion;
+            }
             setStatus(`Catalogo al dia en v${currentVersion}.`);
         });
 
         source.addEventListener('heartbeat', (event) => {
             const payload = JSON.parse(event.data || '{}');
-            currentVersion = Number(payload.catalogVersion || currentVersion);
+            const nextVersion = Number(payload.catalogVersion || currentVersion);
+            if (Number.isFinite(nextVersion) && nextVersion > 0) {
+                currentVersion = nextVersion;
+            }
             setStatus(`Catalogo al dia en v${currentVersion}.`);
         });
 
         source.onerror = () => {
             setStatus('Esperando reconexion del catalogo compartido...');
         };
-    };
-
-    const filterRows = () => {
-        if (!filterInput || !rows.length) {
-            return;
-        }
-
-        const query = filterInput.value.trim().toLowerCase();
-        let visibleCount = 0;
-
-        rows.forEach((row) => {
-            const haystack = row.dataset.search || '';
-            const matches = query === '' || haystack.includes(query);
-            row.classList.toggle('is-hidden', !matches);
-            if (matches) {
-                visibleCount += 1;
-            }
-        });
-
-        if (filterEmpty) {
-            filterEmpty.classList.toggle('is-visible', rows.length > 0 && visibleCount === 0);
-        }
     };
 
     const closeModal = () => {
@@ -977,6 +1177,7 @@
 
         modal.classList.remove('is-open');
         modal.setAttribute('aria-hidden', 'true');
+        applyPendingRefreshIfNeeded();
     };
 
     const closeTransferModal = () => {
@@ -986,6 +1187,7 @@
 
         transferModal.classList.remove('is-open');
         transferModal.setAttribute('aria-hidden', 'true');
+        applyPendingRefreshIfNeeded();
     };
 
     const openModalForRow = (row) => {
@@ -1079,6 +1281,11 @@
         saveButton.classList.toggle('is-hidden', !isDirty);
     };
 
+    function syncInlineDirtyStates() {
+        getCatalogRows().forEach((row) => updateRowDirtyState(row));
+        applyPendingRefreshIfNeeded();
+    }
+
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             connect();
@@ -1089,9 +1296,44 @@
         connect();
     });
 
+    if (searchForm) {
+        searchForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            if (searchTimer) {
+                window.clearTimeout(searchTimer);
+            }
+
+            void submitCatalogSearch();
+        });
+    }
+
     if (filterInput) {
-        filterInput.addEventListener('input', filterRows);
-        filterRows();
+        filterInput.addEventListener('input', () => {
+            if (searchTimer) {
+                window.clearTimeout(searchTimer);
+            }
+
+            searchTimer = window.setTimeout(() => {
+                void submitCatalogSearch();
+            }, 240);
+        });
+    }
+
+    if (clearSearchButton && filterInput) {
+        clearSearchButton.addEventListener('click', () => {
+            if (filterInput.value === '') {
+                filterInput.focus();
+                return;
+            }
+
+            filterInput.value = '';
+            if (searchTimer) {
+                window.clearTimeout(searchTimer);
+            }
+            void submitCatalogSearch();
+            filterInput.focus();
+        });
     }
 
     modifierContainers.forEach((list) => {
@@ -1103,27 +1345,49 @@
         });
     });
 
-    rows.forEach((row) => {
-        row.querySelectorAll('[data-catalog-inline-input]').forEach((input) => {
-            input.addEventListener('input', () => updateRowDirtyState(row));
-            input.addEventListener('change', () => updateRowDirtyState(row));
-        });
+    syncInlineDirtyStates();
 
-        updateRowDirtyState(row);
+    root.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-catalog-inline-input]');
+        if (!input || !root.contains(input)) {
+            return;
+        }
+
+        updateRowDirtyState(input.closest('[data-catalog-row]'));
+        applyPendingRefreshIfNeeded();
     });
 
-    root.querySelectorAll('[data-catalog-edit-open]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const row = button.closest('[data-catalog-row]');
-            openModalForRow(row);
-        });
+    root.addEventListener('change', (event) => {
+        const input = event.target.closest('[data-catalog-inline-input]');
+        if (!input || !root.contains(input)) {
+            return;
+        }
+
+        updateRowDirtyState(input.closest('[data-catalog-row]'));
+        applyPendingRefreshIfNeeded();
     });
 
-    root.querySelectorAll('[data-catalog-transfer-open]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const row = button.closest('[data-catalog-row]');
-            openTransferModalForRow(row);
-        });
+    root.addEventListener('click', (event) => {
+        const paginationLink = event.target.closest('.pagination a');
+        if (paginationLink && root.contains(paginationLink)) {
+            event.preventDefault();
+            void refreshCatalogView(new URL(paginationLink.href), {
+                updateMeta: false,
+                statusText: 'Cargando mas productos del catalogo...',
+            });
+            return;
+        }
+
+        const editButton = event.target.closest('[data-catalog-edit-open]');
+        if (editButton && root.contains(editButton)) {
+            openModalForRow(editButton.closest('[data-catalog-row]'));
+            return;
+        }
+
+        const transferButton = event.target.closest('[data-catalog-transfer-open]');
+        if (transferButton && root.contains(transferButton)) {
+            openTransferModalForRow(transferButton.closest('[data-catalog-row]'));
+        }
     });
 
     document.querySelectorAll('[data-catalog-edit-close]').forEach((button) => {

@@ -644,7 +644,7 @@
                         <strong>{{ $event->store_name }}</strong>
                         <p>{{ \Illuminate\Support\Str::headline(str_replace('.', ' ', $event->event_type)) }}</p>
                     </div>
-                    <div class="feed-time">{{ \Carbon\Carbon::parse($event->received_at)->format('M j, Y · g:i A') }}</div>
+                    <div class="feed-time">{{ $event->displayed_at?->format('M j, Y · g:i A') ?? 'Sin horario' }}</div>
                 </div>
             @empty
                 <div class="empty">Aun no hay actividad reciente que mostrar en el negocio.</div>
