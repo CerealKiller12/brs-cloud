@@ -34,6 +34,19 @@ $generateStoreCode = function (string $name): string {
     return $code;
 };
 
+$normalizeTenantAddons = function ($value) {
+    $addons = is_array($value)
+        ? $value
+        : (is_string($value) ? (json_decode($value, true) ?: []) : []);
+    $restaurantTableCount = (int) round($addons['restaurantTableCount'] ?? 12);
+    $restaurantTableCount = max(1, min($restaurantTableCount, 60));
+
+    return [
+        'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
+        'restaurantTableCount' => $restaurantTableCount,
+    ];
+};
+
 $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
     abort_unless($user->tenant_id, 403, 'Esta cuenta todavia no tiene un negocio asignado.');
 
@@ -1235,7 +1248,7 @@ $registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTe
         return view('admin.clients.index', compact('clients', 'filters', 'statusOptions', 'planOptions'));
     })->name('clients.index');
 
-    Route::get('/clients/{tenantId}', function (int $tenantId) use ($subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill) {
+    Route::get('/clients/{tenantId}', function (int $tenantId) use ($subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill, $normalizeTenantAddons) {
         $tenant = Tenant::query()->findOrFail($tenantId);
         $owner = User::query()
             ->where('tenant_id', $tenantId)
@@ -1264,8 +1277,9 @@ $registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTe
         $planOptions = $subscriptionPlanOptions;
         $statusOptions = $subscriptionStatusOptions;
         $statusPill = $subscriptionStatusPill($tenant->subscription_status);
+        $addonSettings = $normalizeTenantAddons($tenant->addons_json);
 
-        return view('admin.clients.show', compact('tenant', 'owner', 'stores', 'users', 'stats', 'planOptions', 'statusOptions', 'statusPill'));
+        return view('admin.clients.show', compact('tenant', 'owner', 'stores', 'users', 'stats', 'planOptions', 'statusOptions', 'statusPill', 'addonSettings'));
     })->name('clients.show');
 
     Route::post('/clients/{tenantId}/profile', function (Request $request, int $tenantId) {
@@ -1305,6 +1319,25 @@ $registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTe
 
         return redirect()->route('admin.clients.show', $tenant->id)->with('status', 'Subscripcion del cliente actualizada.');
     })->name('clients.subscription.update');
+
+    Route::post('/clients/{tenantId}/addons', function (Request $request, int $tenantId) use ($normalizeTenantAddons) {
+        $tenant = Tenant::query()->findOrFail($tenantId);
+
+        $payload = $request->validate([
+            'restaurant_tables' => ['required', 'boolean'],
+            'restaurant_table_count' => ['required', 'integer', 'min:1', 'max:60'],
+        ]);
+
+        $addons = $normalizeTenantAddons($tenant->addons_json);
+        $addons['restaurantTables'] = (bool) $payload['restaurant_tables'];
+        $addons['restaurantTableCount'] = (int) $payload['restaurant_table_count'];
+
+        $tenant->update([
+            'addons_json' => $addons,
+        ]);
+
+        return redirect()->route('admin.clients.show', $tenant->id)->with('status', 'Addon restaurante actualizado.');
+    })->name('clients.addons.update');
 
 
     Route::post('/clients/{tenantId}/delete', function (Request $request, int $tenantId) {
@@ -1602,6 +1635,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                     'subscription_status' => 'trialing',
                     'addons_json' => [
                         'restaurantTables' => false,
+                        'restaurantTableCount' => 12,
                     ],
                     'is_active' => true,
                     'trial_ends_at' => now()->addDays(14),

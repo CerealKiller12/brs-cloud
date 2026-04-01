@@ -126,9 +126,12 @@ $normalizeTenantAddons = function ($value) {
     $addons = is_array($value)
         ? $value
         : (is_string($value) ? (json_decode($value, true) ?: []) : []);
+    $restaurantTableCount = (int) round($addons['restaurantTableCount'] ?? 12);
+    $restaurantTableCount = max(1, min($restaurantTableCount, 60));
 
     return [
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
+        'restaurantTableCount' => $restaurantTableCount,
     ];
 };
 
@@ -141,6 +144,7 @@ $buildTenantEntitlements = function ($tenant = null) use ($normalizeTenantAddons
         'salesSync' => true,
         'sharedCatalogAcrossDevices' => true,
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
+        'restaurantTableCount' => (int) ($addons['restaurantTableCount'] ?? 12),
     ];
 };
 
@@ -1069,17 +1073,18 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
                 $tenantSlug = $tenantSlugBase.'-'.$counter;
             }
 
-            $tenant = Tenant::query()->create([
-                'name' => trim($payload['tenant_name']),
-                'slug' => $tenantSlug,
-                'plan_code' => 'starter',
-                'subscription_status' => 'trialing',
-                'addons_json' => [
-                    'restaurantTables' => false,
-                ],
-                'is_active' => true,
-                'trial_ends_at' => now()->addDays(14),
-            ]);
+                $tenant = Tenant::query()->create([
+                    'name' => trim($payload['tenant_name']),
+                    'slug' => $tenantSlug,
+                    'plan_code' => 'starter',
+                    'subscription_status' => 'trialing',
+                    'addons_json' => [
+                        'restaurantTables' => false,
+                        'restaurantTableCount' => 12,
+                    ],
+                    'is_active' => true,
+                    'trial_ends_at' => now()->addDays(14),
+                ]);
         }
 
         $branding = is_array($store?->branding_json) ? $store->branding_json : (json_decode($store?->branding_json ?? '[]', true) ?: []);
@@ -1143,12 +1148,14 @@ Route::middleware('auth:sanctum')->put('/cloud/admin/addons/restaurant', functio
 
     $payload = $request->validate([
         'enabled' => ['required', 'boolean'],
+        'tableCount' => ['nullable', 'integer', 'min:1', 'max:60'],
     ]);
 
     /** @var Tenant $tenant */
     $tenant = Tenant::query()->findOrFail($user->tenant_id);
     $addons = $normalizeTenantAddons($tenant->addons_json);
     $addons['restaurantTables'] = (bool) $payload['enabled'];
+    $addons['restaurantTableCount'] = (int) ($payload['tableCount'] ?? $addons['restaurantTableCount'] ?? 12);
 
     $tenant->update([
         'addons_json' => $addons,

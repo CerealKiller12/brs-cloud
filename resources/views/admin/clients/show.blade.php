@@ -102,6 +102,41 @@
     <article class="card">
         <div class="toolbar">
             <div>
+                <small class="eyebrow">Addons</small>
+                <h3>Restaurante</h3>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('admin.clients.addons.update', $tenant->id) }}">
+            @csrf
+            <div class="field">
+                <label for="restaurant_tables">Estado del addon</label>
+                <select id="restaurant_tables" name="restaurant_tables">
+                    <option value="1" {{ (string) old('restaurant_tables', $addonSettings['restaurantTables'] ? '1' : '0') === '1' ? 'selected' : '' }}>Activo</option>
+                    <option value="0" {{ (string) old('restaurant_tables', $addonSettings['restaurantTables'] ? '1' : '0') === '0' ? 'selected' : '' }}>Inactivo</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="restaurant_table_count">Mesas disponibles</label>
+                <input
+                    id="restaurant_table_count"
+                    name="restaurant_table_count"
+                    type="number"
+                    min="1"
+                    max="60"
+                    value="{{ old('restaurant_table_count', $addonSettings['restaurantTableCount']) }}"
+                    required>
+                <div class="muted" style="margin-top: 8px;">
+                    Define cuantas mesas puede trabajar cada caja para este negocio. Si bajas el numero, Venpi conserva temporalmente las cuentas abiertas que ya existan por arriba del nuevo limite.
+                </div>
+            </div>
+            <button class="button" type="submit">Guardar addon</button>
+        </form>
+    </article>
+
+    <article class="card">
+        <div class="toolbar">
+            <div>
                 <small class="eyebrow">Resumen</small>
                 <h3>Responsable y fechas</h3>
             </div>
