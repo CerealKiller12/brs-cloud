@@ -526,7 +526,12 @@ $buildBusinessDashboardData = function (User $user, Request $request) use ($buil
             ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
             ->count(),
         'catalogItems' => $storeStats['catalogItems'],
-        'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->count(),
+        'totalEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->count(),
+        'pendingEvents' => DB::table('sync_events')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('applied_at')
+            ->whereNull('apply_error')
+            ->count(),
         'conflicts' => DB::table('sync_events')
             ->where('tenant_id', $tenantId)
             ->whereNotNull('apply_error')
@@ -1848,7 +1853,13 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                 ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
                 ->count(),
             'catalogItems' => DB::table('cloud_catalog_products')->where('store_id', $storeId)->count(),
-            'pendingEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'totalEvents' => DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'pendingEvents' => DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->whereNull('applied_at')
+                ->whereNull('apply_error')
+                ->count(),
             'conflicts' => DB::table('sync_events')
                 ->where('tenant_id', $tenantId)
                 ->where('store_id', $storeId)

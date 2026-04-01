@@ -661,7 +661,13 @@ $buildDashboardSummaryForStore = function (int $tenantId, int $storeId) use ($bu
                 ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
                 ->count(),
             'catalogItems' => (int) DB::table('cloud_catalog_products')->where('store_id', $storeId)->count(),
-            'pendingEvents' => (int) DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'totalEvents' => (int) DB::table('sync_events')->where('tenant_id', $tenantId)->where('store_id', $storeId)->count(),
+            'pendingEvents' => (int) DB::table('sync_events')
+                ->where('tenant_id', $tenantId)
+                ->where('store_id', $storeId)
+                ->whereNull('applied_at')
+                ->whereNull('apply_error')
+                ->count(),
             'conflicts' => (int) DB::table('sync_events')
                 ->where('tenant_id', $tenantId)
                 ->where('store_id', $storeId)
