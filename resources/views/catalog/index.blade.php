@@ -14,8 +14,9 @@
     }
     .catalog-editor {
         background:
-            radial-gradient(circle at top right, rgba(223, 193, 158, .18), transparent 34%),
-            linear-gradient(180deg, rgba(255,255,255,.99) 0%, rgba(246,250,253,.99) 100%);
+            radial-gradient(circle at top right, rgba(223, 193, 158, .14), transparent 34%),
+            linear-gradient(180deg, rgba(255,255,255,.86) 0%, rgba(246,250,253,.78) 100%);
+        backdrop-filter: blur(18px);
     }
     .catalog-editor-body {
         display: grid;
@@ -104,7 +105,8 @@
         padding: 18px 20px;
         border-radius: 24px;
         border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(249, 242, 233, .98) 0%, rgba(255,255,255,.96) 100%);
+        background: linear-gradient(180deg, rgba(249, 242, 233, .72) 0%, rgba(255,255,255,.6) 100%);
+        backdrop-filter: blur(12px);
     }
     .catalog-editor-support .catalog-editor-actions {
         padding-top: 6px;
@@ -147,7 +149,8 @@
         padding: 18px;
         border-radius: 22px;
         border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(246,250,253,.98) 100%);
+        background: linear-gradient(180deg, rgba(255,255,255,.74) 0%, rgba(246,250,253,.64) 100%);
+        backdrop-filter: blur(12px);
     }
     .catalog-summary-card .stat-value {
         font-size: 32px;
@@ -185,9 +188,17 @@
     .catalog-table-card {
         display: grid;
         gap: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,.84) 0%, rgba(246,250,253,.72) 100%);
+        backdrop-filter: blur(16px);
     }
     .catalog-table-card table {
         table-layout: fixed;
+    }
+    .catalog-store-card,
+    .catalog-editor .surface,
+    .catalog-store-card .surface {
+        background: linear-gradient(180deg, rgba(255,255,255,.62) 0%, rgba(248, 241, 233, .46) 100%);
+        backdrop-filter: blur(12px);
     }
     .catalog-inline-input {
         width: 100%;
@@ -961,6 +972,42 @@
         }
     };
 
+    const setFormSubmitting = (form, isSubmitting) => {
+        if (!form) {
+            return;
+        }
+
+        form.dataset.submitting = isSubmitting ? '1' : '0';
+
+        if (form.id) {
+            document.querySelectorAll(`[form="${form.id}"]`).forEach((button) => {
+                if (button instanceof HTMLButtonElement) {
+                    button.disabled = isSubmitting;
+                }
+            });
+        }
+
+        form.querySelectorAll('button[type="submit"]').forEach((button) => {
+            button.disabled = isSubmitting;
+        });
+    };
+
+    const readErrorMessage = async (response, fallback) => {
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+            try {
+                const payload = await response.json();
+                const firstError = Object.values(payload.errors || {}).flat()[0];
+                return String(firstError || payload.message || fallback);
+            } catch {
+                return fallback;
+            }
+        }
+
+        return fallback;
+    };
+
     const buildCatalogUrl = (overrides = {}) => {
         const current = new URL(window.location.href);
         const action = searchForm?.getAttribute('action') || current.pathname;
@@ -1046,8 +1093,9 @@
         syncInlineDirtyStates();
     };
 
-    const refreshCatalogView = async (url, { updateMeta = false, statusText = 'Actualizando catalogo...' } = {}) => {
+    const refreshCatalogView = async (url, { updateMeta = false, statusText = 'Actualizando catalogo...', doneText = '' } = {}) => {
         const requestId = ++fetchSequence;
+        const previousScrollY = window.scrollY;
 
         if (fetchController) {
             fetchController.abort();
@@ -1087,11 +1135,12 @@
 
             renderCatalogResults(doc);
             window.history.replaceState({}, '', url.toString());
+            window.scrollTo({ top: previousScrollY, behavior: 'auto' });
 
             const query = filterInput?.value.trim() || '';
-            setStatus(query !== ''
+            setStatus(doneText || (query !== ''
                 ? `Mostrando resultados de "${query}" en todo el catalogo.`
-                : `Catalogo al dia en v${currentVersion}.`);
+                : `Catalogo al dia en v${currentVersion}.`));
         } catch (error) {
             if (error?.name === 'AbortError') {
                 return;
@@ -1117,6 +1166,48 @@
                 ? 'Buscando en todo el catalogo compartido...'
                 : 'Recargando el catalogo completo...',
         });
+    };
+
+    const submitCatalogForm = async (form, {
+        successText = 'Cambios guardados.',
+        afterSuccess = null,
+    } = {}) => {
+        if (!form || form.dataset.submitting === '1') {
+            return;
+        }
+
+        setFormSubmitting(form, true);
+        setStatus('Guardando cambios del catalogo...');
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json, text/html',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(form),
+            });
+
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response, 'No pude guardar los cambios del catalogo.'));
+            }
+
+            if (typeof afterSuccess === 'function') {
+                afterSuccess();
+            }
+
+            await refreshCatalogView(buildCatalogUrl(), {
+                updateMeta: true,
+                statusText: 'Actualizando la vista del catalogo...',
+                doneText: successText,
+            });
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : 'No pude guardar los cambios del catalogo.');
+        } finally {
+            setFormSubmitting(form, false);
+        }
     };
 
     const connect = () => {
@@ -1390,6 +1481,18 @@
         }
     });
 
+    root.addEventListener('submit', (event) => {
+        const inlineForm = event.target.closest('form[id^="quick-edit-"]');
+        if (!inlineForm || !root.contains(inlineForm)) {
+            return;
+        }
+
+        event.preventDefault();
+        void submitCatalogForm(inlineForm, {
+            successText: 'Producto guardado sin perder tu filtro.',
+        });
+    });
+
     document.querySelectorAll('[data-catalog-edit-close]').forEach((button) => {
         button.addEventListener('click', closeModal);
     });
@@ -1420,6 +1523,16 @@
             closeTransferModal();
         }
     });
+
+    if (modalForm) {
+        modalForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            void submitCatalogForm(modalForm, {
+                successText: 'Producto actualizado sin recargar la pantalla.',
+                afterSuccess: closeModal,
+            });
+        });
+    }
 
     connect();
 })();
