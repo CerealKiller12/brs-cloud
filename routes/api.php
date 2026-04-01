@@ -821,6 +821,29 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
     ];
 };
 
+$resolveAdminStoreId = function (Request $request) {
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+
+    $payload = $request->validate([
+        'store_id' => ['required', 'integer', 'min:1'],
+    ]);
+
+    $storeId = (int) $payload['store_id'];
+
+    $storeExists = DB::table('stores')
+        ->where('tenant_id', $user->tenant_id)
+        ->where('id', $storeId)
+        ->exists();
+
+    abort_unless($storeExists, 404, 'No encontre esa sucursal dentro de tu tenant en Venpi Cloud.');
+
+    return [
+        'tenantId' => (int) $user->tenant_id,
+        'storeId' => $storeId,
+    ];
+};
+
 Route::post('/auth/login', function (Request $request) {
     $payload = $request->validate([
         'email' => ['required', 'email'],
@@ -922,6 +945,35 @@ Route::middleware('auth:sanctum')->get('/cloud/admin/stores', function (Request 
     return response()->json([
         'items' => $stores,
     ]);
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/dashboard-summary', function (Request $request) use ($resolveAdminStoreId, $buildDashboardSummaryForStore) {
+    $context = $resolveAdminStoreId($request);
+
+    return response()->json(
+        $buildDashboardSummaryForStore($context['tenantId'], $context['storeId'])
+    );
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/recent-sales', function (Request $request) use ($resolveAdminStoreId, $buildCloudRecentSalesForStore) {
+    $context = $resolveAdminStoreId($request);
+    $search = $request->query('search');
+
+    return response()->json(
+        $buildCloudRecentSalesForStore(
+            $context['tenantId'],
+            $context['storeId'],
+            is_string($search) ? $search : null
+        )
+    );
+});
+
+Route::middleware('auth:sanctum')->get('/cloud/admin/sales/{saleId}', function (Request $request, string $saleId) use ($resolveAdminStoreId, $buildCloudSaleDetailForStore) {
+    $context = $resolveAdminStoreId($request);
+
+    return response()->json(
+        $buildCloudSaleDetailForStore($context['tenantId'], $context['storeId'], $saleId)
+    );
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Request $request) use ($generateStoreCode) {
