@@ -1600,6 +1600,9 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
                     'slug' => $tenantSlug,
                     'plan_code' => 'starter',
                     'subscription_status' => 'trialing',
+                    'addons_json' => [
+                        'restaurantTables' => false,
+                    ],
                     'is_active' => true,
                     'trial_ends_at' => now()->addDays(14),
                 ]);

@@ -12,6 +12,7 @@ class Tenant extends Model
         'slug',
         'plan_code',
         'subscription_status',
+        'addons_json',
         'trial_ends_at',
         'onboarding_completed_at',
         'is_active',
@@ -23,6 +24,7 @@ class Tenant extends Model
             'trial_ends_at' => 'datetime',
             'onboarding_completed_at' => 'datetime',
             'is_active' => 'boolean',
+            'addons_json' => 'array',
         ];
     }
 

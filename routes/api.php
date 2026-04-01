@@ -122,6 +122,28 @@ Route::get('/health', function () {
 
 Route::post('/auth/native/consume', [NativeSocialAuthController::class, 'consume']);
 
+$normalizeTenantAddons = function ($value) {
+    $addons = is_array($value)
+        ? $value
+        : (is_string($value) ? (json_decode($value, true) ?: []) : []);
+
+    return [
+        'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
+    ];
+};
+
+$buildTenantEntitlements = function ($tenant = null) use ($normalizeTenantAddons) {
+    $addons = $normalizeTenantAddons($tenant?->addons_json ?? null);
+
+    return [
+        'offlineFirst' => true,
+        'catalogSync' => true,
+        'salesSync' => true,
+        'sharedCatalogAcrossDevices' => true,
+        'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
+    ];
+};
+
 $resolveStoreContext = function (Request $request) {
     $actor = $request->user();
 
@@ -161,6 +183,7 @@ $resolveStoreContext = function (Request $request) {
                 'tenants.slug as tenant_slug',
                 'tenants.plan_code',
                 'tenants.subscription_status',
+                'tenants.addons_json',
                 'tenants.is_active as tenant_is_active',
             ])
             ->where('stores.id', $actor->store_id)
@@ -189,6 +212,7 @@ $resolveStoreContext = function (Request $request) {
                 'tenants.slug as tenant_slug',
                 'tenants.plan_code',
                 'tenants.subscription_status',
+                'tenants.addons_json',
                 'tenants.is_active as tenant_is_active',
             ])
             ->where('stores.id', $actor->store_id)
@@ -225,6 +249,7 @@ $resolveStoreContext = function (Request $request) {
             'tenants.slug as tenant_slug',
             'tenants.plan_code',
             'tenants.subscription_status',
+            'tenants.addons_json',
             'tenants.is_active as tenant_is_active',
         ])
         ->where('stores.code', $storeCode)
@@ -850,7 +875,7 @@ $resolveAdminStoreId = function (Request $request) {
     ];
 };
 
-Route::post('/auth/login', function (Request $request) {
+Route::post('/auth/login', function (Request $request) use ($buildTenantEntitlements) {
     $payload = $request->validate([
         'email' => ['required', 'email'],
         'password' => ['required', 'string', 'min:6'],
@@ -889,10 +914,11 @@ Route::post('/auth/login', function (Request $request) {
             'name' => $store->name,
             'code' => $store->code,
         ] : null,
+        'entitlements' => $buildTenantEntitlements($tenant),
     ]);
 });
 
-Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) {
+Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) use ($buildTenantEntitlements) {
     $user = $request->user();
     $tenant = $user instanceof User && $user->tenant_id ? DB::table('tenants')->where('id', $user->tenant_id)->first() : null;
     $store = $user instanceof User && $user->store_id ? DB::table('stores')->where('id', $user->store_id)->first() : null;
@@ -916,6 +942,7 @@ Route::middleware('auth:sanctum')->get('/auth/me', function (Request $request) {
             'name' => $store->name,
             'code' => $store->code,
         ] : null,
+        'entitlements' => $buildTenantEntitlements($tenant),
     ]);
 });
 
@@ -1047,6 +1074,9 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
                 'slug' => $tenantSlug,
                 'plan_code' => 'starter',
                 'subscription_status' => 'trialing',
+                'addons_json' => [
+                    'restaurantTables' => false,
+                ],
                 'is_active' => true,
                 'trial_ends_at' => now()->addDays(14),
             ]);
@@ -1105,6 +1135,29 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/business', function (Reque
             'isActive' => (bool) $store->is_active,
         ],
     ], 201);
+});
+
+Route::middleware('auth:sanctum')->put('/cloud/admin/addons/restaurant', function (Request $request) use ($normalizeTenantAddons, $buildTenantEntitlements) {
+    $user = $request->user();
+    abort_unless($user instanceof User && $user->tenant_id, 403, 'Tu cuenta cloud no tiene tenant asignado.');
+
+    $payload = $request->validate([
+        'enabled' => ['required', 'boolean'],
+    ]);
+
+    /** @var Tenant $tenant */
+    $tenant = Tenant::query()->findOrFail($user->tenant_id);
+    $addons = $normalizeTenantAddons($tenant->addons_json);
+    $addons['restaurantTables'] = (bool) $payload['enabled'];
+
+    $tenant->update([
+        'addons_json' => $addons,
+    ]);
+
+    return response()->json([
+        'ok' => true,
+        'entitlements' => $buildTenantEntitlements($tenant->fresh()),
+    ]);
 });
 
 Route::middleware('auth:sanctum')->post('/cloud/admin/stores', function (Request $request) use ($generateStoreCode) {
@@ -1179,6 +1232,7 @@ Route::middleware('auth:sanctum')->post('/cloud/admin/device-token', function (R
             'tenants.slug as tenant_slug',
             'tenants.plan_code',
             'tenants.subscription_status',
+            'tenants.addons_json',
             'tenants.is_active as tenant_is_active',
         ])
         ->where('stores.id', $payload['store_id'])
@@ -1231,7 +1285,7 @@ Route::get('/cloud/health', function () {
     ]);
 });
 
-Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatforms, $resolveStoreContext) {
+Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatforms, $resolveStoreContext, $buildTenantEntitlements) {
     $payload = $request->validate([
         'device_id' => ['required', 'string', 'max:120'],
         'name' => ['nullable', 'string', 'max:120'],
@@ -1288,12 +1342,7 @@ Route::post('/cloud/bootstrap', function (Request $request) use ($supportedPlatf
             'deviceId' => $payload['device_id'],
             'checkedInAt' => $now->toIso8601String(),
         ],
-        'entitlements' => [
-            'offlineFirst' => true,
-            'catalogSync' => true,
-            'salesSync' => true,
-            'sharedCatalogAcrossDevices' => true,
-        ],
+        'entitlements' => $buildTenantEntitlements($store),
     ]);
 })->middleware('auth:sanctum');
 
