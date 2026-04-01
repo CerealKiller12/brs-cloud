@@ -1389,7 +1389,7 @@ if ($adminHost !== '') {
         ->group($registerAdminRoutes);
 }
 
-Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets, $catalogProductModifiers, $parseCatalogModifiersText, $buildCatalogProductMetadata, $buildEffectiveCloudSalesFromSyncEvents) {
+Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets, $catalogProductModifiers, $parseCatalogModifiersText, $buildCatalogProductMetadata, $buildEffectiveCloudSalesFromSyncEvents, $decorateSyncEventTimestamps, $normalizeStoreTimezone, $parseCloudEventTimestampForStore) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
