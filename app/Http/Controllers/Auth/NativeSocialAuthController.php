@@ -250,6 +250,7 @@ class NativeSocialAuthController extends Controller
             'name' => $displayName,
             'email' => $email,
             'password' => Str::password(32),
+            'password_login_enabled_at' => null,
             'role' => 'owner',
             'is_active' => true,
             'email_verified_at' => now(),

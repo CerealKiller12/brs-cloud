@@ -9,7 +9,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Illuminate\Validation\Rule;
@@ -47,6 +50,10 @@ $normalizeTenantAddons = function ($value) {
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
         'restaurantTableCount' => $restaurantTableCount,
     ];
+};
+
+$accountPasswordLinkCacheKey = function (int $userId): string {
+    return "account_password_link:{$userId}";
 };
 
 $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
@@ -1151,15 +1158,24 @@ Route::middleware('guest')->group(function () {
             'password' => ['required', 'string'],
         ]);
 
-        if (!Auth::attempt(array_merge($credentials, ['is_active' => true]), $request->boolean('remember'))) {
+        /** @var User|null $user */
+        $user = User::query()->where('email', $credentials['email'])->first();
+
+        if (! $user || ! $user->is_active || ! Hash::check($credentials['password'], $user->password)) {
             return back()
                 ->withInput($request->only('email'))
                 ->withErrors(['email' => 'Credenciales invalidas para Venpi Cloud.']);
         }
 
+        if (! $user->hasPasswordLoginEnabled()) {
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors(['email' => 'Esa cuenta todavia no tiene contrasena vinculada. Entra con Google o Apple, o activala desde Cuenta.']);
+        }
+
+        Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
-        $user = Auth::user();
         $adminHost = trim((string) config('app.admin_host', ''));
         $isAdminHostRequest = $adminHost !== '' && strcasecmp($request->getHost(), $adminHost) === 0;
         $defaultRoute = $user?->tenant?->onboarding_completed_at ? route('dashboard') : route('onboarding.index');
@@ -1438,7 +1454,7 @@ if ($adminHost !== '') {
         ->group($registerAdminRoutes);
 }
 
-Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets, $catalogProductModifiers, $parseCatalogModifiersText, $buildCatalogProductMetadata, $buildEffectiveCloudSalesFromSyncEvents, $decorateSyncEventTimestamps, $normalizeStoreTimezone, $parseCloudEventTimestampForStore) {
+Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveStoreForUser, $buildBusinessDashboardData, $bumpCatalogVersion, $streamCatalogVersionEvents, $humanizeEventType, $humanizeAggregateType, $humanizeDeviceLabel, $describeSyncEvent, $cloudThemePresets, $catalogProductModifiers, $parseCatalogModifiersText, $buildCatalogProductMetadata, $buildEffectiveCloudSalesFromSyncEvents, $decorateSyncEventTimestamps, $normalizeStoreTimezone, $parseCloudEventTimestampForStore, $accountPasswordLinkCacheKey) {
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
@@ -1465,7 +1481,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         return back()->with('status', "Sucursal activa actualizada a {$store->name}.");
     })->name('context.store');
 
-    Route::get('/settings', function () use ($cloudThemePresets, $resolveStoreForUser) {
+    Route::get('/settings', function () use ($cloudThemePresets, $resolveStoreForUser, $accountPasswordLinkCacheKey) {
         /** @var User $user */
         $user = Auth::user();
         $tenant = Tenant::query()->findOrFail($user->tenant_id);
@@ -1473,8 +1489,26 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $branding = is_array($store->branding_json) ? $store->branding_json : (json_decode($store->branding_json ?? '[]', true) ?: []);
         $themeStore = $resolveStoreForUser($user);
         $themeBranding = is_array($themeStore->branding_json) ? $themeStore->branding_json : (json_decode($themeStore->branding_json ?? '[]', true) ?: []);
+        $emailParts = explode('@', (string) $user->email, 2);
+        $emailLocal = $emailParts[0] ?? '';
+        $emailDomain = $emailParts[1] ?? '';
+        $maskedLocal = mb_strlen($emailLocal) <= 2
+            ? $emailLocal
+            : mb_substr($emailLocal, 0, 1).str_repeat('•', max(1, mb_strlen($emailLocal) - 2)).mb_substr($emailLocal, -1);
+        $maskedAccessEmail = $emailDomain !== '' ? "{$maskedLocal}@{$emailDomain}" : $user->email;
+        $passwordVerificationPending = Cache::has($accountPasswordLinkCacheKey($user->id));
 
-        return view('settings', compact('user', 'tenant', 'store', 'branding', 'cloudThemePresets', 'themeStore', 'themeBranding'));
+        return view('settings', compact(
+            'user',
+            'tenant',
+            'store',
+            'branding',
+            'cloudThemePresets',
+            'themeStore',
+            'themeBranding',
+            'maskedAccessEmail',
+            'passwordVerificationPending',
+        ));
     })->name('settings.index');
 
     Route::post('/settings/account', function (Request $request) {
@@ -1493,6 +1527,69 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
 
         return redirect()->route('settings.index')->with('status', 'Cuenta actualizada.');
     })->name('settings.account');
+
+    Route::post('/settings/access/password/request', function () use ($accountPasswordLinkCacheKey) {
+        /** @var User $user */
+        $user = Auth::user();
+        abort_unless($user->email, 422, 'Tu cuenta no tiene correo disponible para verificar acceso.');
+
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        Cache::put($accountPasswordLinkCacheKey($user->id), [
+            'code_hash' => Hash::make($code),
+        ], now()->addMinutes(15));
+
+        try {
+            Mail::raw(
+                "Tu codigo para vincular o renovar la contrasena de Venpi Cloud es: {$code}\n\nEste codigo vence en 15 minutos.",
+                function ($message) use ($user) {
+                    $message
+                        ->to($user->email, $user->name)
+                        ->subject('Codigo de acceso | Venpi Cloud');
+                }
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('settings.index')
+                ->withErrors(['account_access' => 'No pude enviar el codigo de verificacion a tu correo.']);
+        }
+
+        return redirect()
+            ->route('settings.index')
+            ->with('status', 'Te enviamos un codigo de verificacion para activar o renovar tu contrasena.');
+    })->name('settings.access.password.request');
+
+    Route::post('/settings/access/password/confirm', function (Request $request) use ($accountPasswordLinkCacheKey) {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $payload = $request->validate([
+            'verification_code' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', 'min:8', 'max:120', 'confirmed'],
+        ]);
+
+        $verification = Cache::get($accountPasswordLinkCacheKey($user->id));
+
+        if (! is_array($verification) || ! Hash::check(trim($payload['verification_code']), (string) ($verification['code_hash'] ?? ''))) {
+            return redirect()
+                ->route('settings.index')
+                ->withErrors(['account_access' => 'El codigo ya vencio o no coincide. Solicita uno nuevo para continuar.']);
+        }
+
+        $user->update([
+            'password' => $payload['password'],
+            'password_login_enabled_at' => now(),
+            'email_verified_at' => $user->email_verified_at ?: now(),
+        ]);
+
+        Cache::forget($accountPasswordLinkCacheKey($user->id));
+
+        return redirect()
+            ->route('settings.index')
+            ->with('status', 'Tu contrasena ya quedo vinculada a esta cuenta.');
+    })->name('settings.access.password.confirm');
 
     Route::post('/settings/tenant', function (Request $request) {
         /** @var User $user */

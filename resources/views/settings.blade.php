@@ -114,12 +114,69 @@
         border-radius: 999px;
         border: 1px solid rgba(0,0,0,.08);
     }
+    .access-grid {
+        display: grid;
+        grid-template-columns: 1.3fr .85fr .85fr;
+        gap: 16px;
+    }
+    .access-method {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,.76);
+    }
+    .access-method-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: start;
+    }
+    .access-method-head strong {
+        display: block;
+        margin-bottom: 4px;
+    }
+    .access-password-stack {
+        display: grid;
+        gap: 14px;
+    }
+    .access-inline-form {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+    }
+    .access-password-form {
+        display: grid;
+        grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: end;
+    }
+    .access-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
     @media (max-width: 1100px) {
         .settings-top,
         .settings-summary,
         .settings-form-grid,
-        .theme-grid {
+        .theme-grid,
+        .access-grid {
             grid-template-columns: 1fr;
+        }
+        .access-password-form {
+            grid-template-columns: 1fr;
+        }
+        .access-inline-form {
+            align-items: start;
+            flex-direction: column;
         }
     }
 </style>
@@ -191,6 +248,104 @@
 @if ($errors->any())
     <section class="notice danger">{{ $errors->first() }}</section>
 @endif
+
+<section class="card settings-form-card">
+    <div class="toolbar">
+        <div>
+            <small class="eyebrow">Acceso</small>
+            <h3>Metodos para entrar a tu misma cuenta</h3>
+        </div>
+        <span class="pill">{{ ucfirst($user->role) }}</span>
+    </div>
+
+    <p class="muted" style="margin-bottom: 18px;">
+        Vincula Google, Apple o una contrasena sobre esta misma cuenta cloud. No crea otro usuario: solo agrega otra forma de entrar.
+    </p>
+
+    <div class="access-grid">
+        <article class="access-method">
+            <div class="access-method-head">
+                <div>
+                    <strong>Correo y contrasena</strong>
+                    <p class="muted">
+                        {{ $user->hasPasswordLoginEnabled()
+                            ? 'Ya puedes entrar con correo y contrasena. Si quieres cambiarla, vuelve a verificar tu correo.'
+                            : 'Todavia entras con Google o Apple. Activa tu contrasena con un codigo enviado a tu correo.' }}
+                    </p>
+                </div>
+                <span class="pill {{ $user->hasPasswordLoginEnabled() ? 'success' : 'danger' }}">
+                    {{ $user->hasPasswordLoginEnabled() ? 'Activa' : 'Sin vincular' }}
+                </span>
+            </div>
+
+            <div class="access-password-stack">
+                <form method="POST" action="{{ route('settings.access.password.request') }}" class="access-inline-form">
+                    @csrf
+                    <div>
+                        <strong style="display: block;">Verificacion por correo</strong>
+                        <span class="muted">Te enviaremos un codigo de 6 digitos a {{ $maskedAccessEmail }}. {{ $passwordVerificationPending ? 'Ya hay uno activo.' : '' }}</span>
+                    </div>
+                    <button class="button-secondary" type="submit">
+                        {{ $user->hasPasswordLoginEnabled() ? 'Enviar nuevo codigo' : 'Activar contrasena' }}
+                    </button>
+                </form>
+
+                <form method="POST" action="{{ route('settings.access.password.confirm') }}" class="access-password-form">
+                    @csrf
+                    <div class="field">
+                        <label for="verification_code">Codigo</label>
+                        <input id="verification_code" name="verification_code" inputmode="numeric" maxlength="6" value="{{ old('verification_code') }}" placeholder="123456" required>
+                    </div>
+                    <div class="field">
+                        <label for="password_access">Nueva contrasena</label>
+                        <input id="password_access" name="password" type="password" required>
+                    </div>
+                    <div class="field">
+                        <label for="password_access_confirmation">Confirmar</label>
+                        <input id="password_access_confirmation" name="password_confirmation" type="password" required>
+                    </div>
+                    <button class="button" type="submit">Guardar contrasena</button>
+                </form>
+            </div>
+        </article>
+
+        <article class="access-method">
+            <div class="access-method-head">
+                <div>
+                    <strong>Google</strong>
+                    <p class="muted">{{ $user->google_id ? 'Este acceso ya entra a la misma cuenta.' : 'Agrega Google como otro metodo de entrada.' }}</p>
+                </div>
+                <span class="pill {{ $user->google_id ? 'success' : '' }}">{{ $user->google_id ? 'Vinculado' : 'Disponible' }}</span>
+            </div>
+
+            <div class="access-actions">
+                @if ($user->google_id)
+                    <span class="muted">Ya puedes entrar con Google.</span>
+                @else
+                    <a class="button-secondary" href="{{ route('social.redirect', ['provider' => 'google', 'link_account' => 1]) }}">Vincular Google</a>
+                @endif
+            </div>
+        </article>
+
+        <article class="access-method">
+            <div class="access-method-head">
+                <div>
+                    <strong>Apple</strong>
+                    <p class="muted">{{ $user->apple_id ? 'Este acceso ya entra a la misma cuenta.' : 'Agrega Apple como otro metodo de entrada.' }}</p>
+                </div>
+                <span class="pill {{ $user->apple_id ? 'success' : '' }}">{{ $user->apple_id ? 'Vinculado' : 'Disponible' }}</span>
+            </div>
+
+            <div class="access-actions">
+                @if ($user->apple_id)
+                    <span class="muted">Ya puedes entrar con Apple.</span>
+                @else
+                    <a class="button-secondary" href="{{ route('social.redirect', ['provider' => 'apple', 'link_account' => 1]) }}">Vincular Apple</a>
+                @endif
+            </div>
+        </article>
+    </div>
+</section>
 
 <section class="settings-form-grid">
     <article class="card settings-form-card">

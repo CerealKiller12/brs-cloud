@@ -896,6 +896,12 @@ Route::post('/auth/login', function (Request $request) use ($buildTenantEntitlem
         ], 422);
     }
 
+    if (! $user->hasPasswordLoginEnabled()) {
+        return response()->json([
+            'message' => 'Tu cuenta cloud todavia no tiene contrasena vinculada. Entra con Google o Apple, o activala desde Cuenta.',
+        ], 422);
+    }
+
     $token = $user->createToken('cloud-admin', ['cloud:read', 'cloud:write'])->plainTextToken;
     $store = $user->store_id ? DB::table('stores')->where('id', $user->store_id)->first() : null;
     $tenant = $user->tenant_id ? DB::table('tenants')->where('id', $user->tenant_id)->first() : null;

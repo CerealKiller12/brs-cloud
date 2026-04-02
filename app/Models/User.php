@@ -17,6 +17,7 @@ use Laravel\Sanctum\HasApiTokens;
     'name',
     'email',
     'password',
+    'password_login_enabled_at',
     'role',
     'is_active',
     'is_platform_admin',
@@ -34,10 +35,16 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'password_login_enabled_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
             'is_platform_admin' => 'boolean',
         ];
+    }
+
+    public function hasPasswordLoginEnabled(): bool
+    {
+        return $this->password_login_enabled_at !== null;
     }
 
     public function tenant(): BelongsTo
