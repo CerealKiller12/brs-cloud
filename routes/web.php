@@ -1170,7 +1170,7 @@ Route::middleware('guest')->group(function () {
     })->name('login.submit');
 });
 
-$registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill) {
+$registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTenantMeta, $subscriptionPlanOptions, $subscriptionStatusOptions, $subscriptionStatusPill, $normalizeTenantAddons) {
     Route::get('/', function () use ($adminTenantListingQuery, $attachAdminTenantMeta) {
         $baseQuery = $adminTenantListingQuery();
 
