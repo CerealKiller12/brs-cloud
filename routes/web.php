@@ -38,8 +38,10 @@ $normalizeTenantAddons = function ($value) {
     $addons = is_array($value)
         ? $value
         : (is_string($value) ? (json_decode($value, true) ?: []) : []);
-    $restaurantTableCount = (int) round($addons['restaurantTableCount'] ?? 12);
-    $restaurantTableCount = max(1, min($restaurantTableCount, 60));
+    $rawRestaurantTableCount = $addons['restaurantTableCount'] ?? 12;
+    $restaurantTableCount = $rawRestaurantTableCount === null
+        ? null
+        : max(1, min((int) round($rawRestaurantTableCount), 60));
 
     return [
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
@@ -1325,12 +1327,21 @@ $registerAdminRoutes = function () use ($adminTenantListingQuery, $attachAdminTe
 
         $payload = $request->validate([
             'restaurant_tables' => ['required', 'boolean'],
-            'restaurant_table_count' => ['required', 'integer', 'min:1', 'max:60'],
+            'restaurant_table_mode' => ['required', Rule::in(['limited', 'unlimited'])],
+            'restaurant_table_count' => [
+                Rule::requiredIf(fn () => ($request->input('restaurant_table_mode') ?? 'limited') === 'limited'),
+                'nullable',
+                'integer',
+                'min:1',
+                'max:60',
+            ],
         ]);
 
         $addons = $normalizeTenantAddons($tenant->addons_json);
         $addons['restaurantTables'] = (bool) $payload['restaurant_tables'];
-        $addons['restaurantTableCount'] = (int) $payload['restaurant_table_count'];
+        $addons['restaurantTableCount'] = $payload['restaurant_table_mode'] === 'unlimited'
+            ? null
+            : (int) $payload['restaurant_table_count'];
 
         $tenant->update([
             'addons_json' => $addons,

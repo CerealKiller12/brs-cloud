@@ -126,8 +126,10 @@ $normalizeTenantAddons = function ($value) {
     $addons = is_array($value)
         ? $value
         : (is_string($value) ? (json_decode($value, true) ?: []) : []);
-    $restaurantTableCount = (int) round($addons['restaurantTableCount'] ?? 12);
-    $restaurantTableCount = max(1, min($restaurantTableCount, 60));
+    $rawRestaurantTableCount = $addons['restaurantTableCount'] ?? 12;
+    $restaurantTableCount = $rawRestaurantTableCount === null
+        ? null
+        : max(1, min((int) round($rawRestaurantTableCount), 60));
 
     return [
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
@@ -144,7 +146,7 @@ $buildTenantEntitlements = function ($tenant = null) use ($normalizeTenantAddons
         'salesSync' => true,
         'sharedCatalogAcrossDevices' => true,
         'restaurantTables' => (bool) ($addons['restaurantTables'] ?? false),
-        'restaurantTableCount' => (int) ($addons['restaurantTableCount'] ?? 12),
+        'restaurantTableCount' => $addons['restaurantTableCount'],
     ];
 };
 
@@ -1155,7 +1157,11 @@ Route::middleware('auth:sanctum')->put('/cloud/admin/addons/restaurant', functio
     $tenant = Tenant::query()->findOrFail($user->tenant_id);
     $addons = $normalizeTenantAddons($tenant->addons_json);
     $addons['restaurantTables'] = (bool) $payload['enabled'];
-    $addons['restaurantTableCount'] = (int) ($payload['tableCount'] ?? $addons['restaurantTableCount'] ?? 12);
+    if (array_key_exists('tableCount', $payload)) {
+        $addons['restaurantTableCount'] = $payload['tableCount'] === null
+            ? null
+            : (int) $payload['tableCount'];
+    }
 
     $tenant->update([
         'addons_json' => $addons,

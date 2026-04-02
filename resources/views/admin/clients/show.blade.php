@@ -117,6 +117,16 @@
                 </select>
             </div>
             <div class="field">
+                <label for="restaurant_table_mode">Tope del negocio</label>
+                <select id="restaurant_table_mode" name="restaurant_table_mode">
+                    <option value="limited" {{ old('restaurant_table_mode', $addonSettings['restaurantTableCount'] === null ? 'unlimited' : 'limited') === 'limited' ? 'selected' : '' }}>Limitado</option>
+                    <option value="unlimited" {{ old('restaurant_table_mode', $addonSettings['restaurantTableCount'] === null ? 'unlimited' : 'limited') === 'unlimited' ? 'selected' : '' }}>Ilimitado</option>
+                </select>
+                <div class="muted" style="margin-top: 8px;">
+                    Este tope vive en el negocio. Cada caja puede mostrar menos mesas localmente desde Venpi sin perder las cuentas abiertas.
+                </div>
+            </div>
+            <div class="field">
                 <label for="restaurant_table_count">Mesas disponibles</label>
                 <input
                     id="restaurant_table_count"
@@ -124,10 +134,9 @@
                     type="number"
                     min="1"
                     max="60"
-                    value="{{ old('restaurant_table_count', $addonSettings['restaurantTableCount']) }}"
-                    required>
+                    value="{{ old('restaurant_table_count', $addonSettings['restaurantTableCount'] ?? 12) }}">
                 <div class="muted" style="margin-top: 8px;">
-                    Define cuantas mesas puede trabajar cada caja para este negocio. Si bajas el numero, Venpi conserva temporalmente las cuentas abiertas que ya existan por arriba del nuevo limite.
+                    Si eliges limite, define aqui cuantas mesas puede usar el negocio. Si lo dejas ilimitado, este valor se ignora. Cuando bajas el tope, Venpi conserva temporalmente las cuentas abiertas que ya existan por arriba del nuevo limite.
                 </div>
             </div>
             <button class="button" type="submit">Guardar addon</button>
