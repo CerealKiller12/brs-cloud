@@ -56,6 +56,61 @@ $accountPasswordLinkCacheKey = function (int $userId): string {
     return "account_password_link:{$userId}";
 };
 
+$buildLandingViewData = function () {
+    $downloadsConfig = config('services.downloads', []);
+    $supportEmail = trim((string) ($downloadsConfig['support_email'] ?? 'hola@venpi.mx'));
+
+    return [
+        'downloads' => [
+            [
+                'key' => 'windows',
+                'name' => 'Windows',
+                'description' => 'Instalador de caja local para mostrador, periféricos y operación diaria.',
+                'availability' => !empty($downloadsConfig['windows_url']) ? 'Descarga directa' : 'Próximamente',
+                'cta' => !empty($downloadsConfig['windows_url']) ? 'Descargar instalador' : 'Disponible pronto',
+                'url' => $downloadsConfig['windows_url'] ?: null,
+                'requiresInstallation' => true,
+                'requirement' => 'Requiere descargar e instalar Venpi en Windows 10 o 11.',
+                'icon' => 'windows',
+            ],
+            [
+                'key' => 'mac',
+                'name' => 'Mac',
+                'description' => 'App de escritorio para caja local, impresoras y operación fuera del navegador.',
+                'availability' => !empty($downloadsConfig['mac_url']) ? 'Descarga directa' : 'Próximamente',
+                'cta' => !empty($downloadsConfig['mac_url']) ? 'Descargar para Mac' : 'Disponible pronto',
+                'url' => $downloadsConfig['mac_url'] ?: null,
+                'requiresInstallation' => true,
+                'requirement' => 'Requiere descargar e instalar Venpi en macOS antes de abrir la caja.',
+                'icon' => 'mac',
+            ],
+            [
+                'key' => 'ios',
+                'name' => 'iPhone y iPad',
+                'description' => 'Distribución desde App Store para operación táctil, despliegue limpio y actualizaciones por Apple.',
+                'availability' => !empty($downloadsConfig['app_store_url']) ? 'App Store' : 'Próximamente',
+                'cta' => !empty($downloadsConfig['app_store_url']) ? 'Abrir App Store' : 'Disponible pronto',
+                'url' => $downloadsConfig['app_store_url'] ?: null,
+                'requiresInstallation' => false,
+                'requirement' => 'Se instala desde App Store. No se descarga directamente desde la web.',
+                'icon' => 'ios',
+            ],
+            [
+                'key' => 'android',
+                'name' => 'Android',
+                'description' => 'Distribución desde Google Play para cajas móviles, tablets y apoyo en piso.',
+                'availability' => !empty($downloadsConfig['google_play_url']) ? 'Google Play' : 'Próximamente',
+                'cta' => !empty($downloadsConfig['google_play_url']) ? 'Abrir Google Play' : 'Disponible pronto',
+                'url' => $downloadsConfig['google_play_url'] ?: null,
+                'requiresInstallation' => false,
+                'requirement' => 'Se instala desde Google Play. La web redirige a la tienda oficial.',
+                'icon' => 'android',
+            ],
+        ],
+        'downloadsSupportEmail' => $supportEmail,
+    ];
+};
+
 $buildStoreContext = function (User $user, ?int $requestedStoreId = null) {
     abort_unless($user->tenant_id, 403, 'Esta cuenta todavia no tiene un negocio asignado.');
 
@@ -1120,14 +1175,14 @@ $streamCatalogVersionEvents = function (int $storeId, string $storeCode, int $in
     ]);
 };
 
-Route::get('/', function () {
+Route::get('/', function () use ($buildLandingViewData) {
     $isAdminHostRequest = ($adminHost = trim((string) config('app.admin_host', ''))) !== ''
         && strcasecmp(request()->getHost(), $adminHost) === 0;
 
     if (!Auth::check()) {
         return $isAdminHostRequest
             ? redirect()->route('login')
-            : view('landing');
+            : view('landing', $buildLandingViewData());
     }
 
     /** @var User|null $user */
@@ -1137,6 +1192,13 @@ Route::get('/', function () {
         ? redirect()->route('admin.dashboard')
         : redirect()->route('dashboard');
 });
+
+Route::get('/descargas', function () use ($buildLandingViewData) {
+    return view('landing', [
+        ...$buildLandingViewData(),
+        'downloadsOnly' => true,
+    ]);
+})->name('downloads');
 
 Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect');
 Route::match(['GET', 'POST'], '/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback');

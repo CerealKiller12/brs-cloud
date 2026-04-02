@@ -49,4 +49,12 @@ return [
         'team_id' => env('APPLE_ADMIN_TEAM_ID', env('APPLE_TEAM_ID')),
         'key_id' => env('APPLE_ADMIN_KEY_ID', env('APPLE_KEY_ID')),
     ],
+
+    'downloads' => [
+        'windows_url' => env('DOWNLOADS_WINDOWS_URL'),
+        'mac_url' => env('DOWNLOADS_MAC_URL'),
+        'app_store_url' => env('DOWNLOADS_APP_STORE_URL'),
+        'google_play_url' => env('DOWNLOADS_GOOGLE_PLAY_URL'),
+        'support_email' => env('DOWNLOADS_SUPPORT_EMAIL', 'hola@venpi.mx'),
+    ],
 ];

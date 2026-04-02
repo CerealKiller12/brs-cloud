@@ -41,6 +41,14 @@
             color: inherit;
             text-decoration: none;
         }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.88rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(95, 61, 36, 0.1);
+            background: rgba(255, 255, 255, 0.74);
+        }
         .page-shell {
             width: min(1240px, calc(100vw - 40px));
             margin: 0 auto;
@@ -411,6 +419,10 @@
             gap: 12px;
             flex-wrap: wrap;
         }
+        .downloads-grid__intro {
+            display: grid;
+            gap: 8px;
+        }
         .download-pill {
             display: inline-flex;
             align-items: center;
@@ -426,9 +438,50 @@
             text-transform: uppercase;
         }
         .download-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(95, 61, 36, 0.12);
+            background: rgba(255, 255, 255, 0.7);
             color: var(--accent-strong);
             font-weight: 600;
             font-size: 0.94rem;
+        }
+        .download-link--disabled {
+            opacity: .72;
+            pointer-events: none;
+        }
+        .download-requirement {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 0.92rem;
+        }
+        .download-callout {
+            margin-top: 20px;
+            display: grid;
+            gap: 14px;
+            padding: 20px 22px;
+            border-radius: 24px;
+            border: 1px solid rgba(95, 61, 36, 0.08);
+            background: rgba(255, 251, 244, 0.82);
+        }
+        .download-callout strong {
+            display: block;
+            margin-bottom: 6px;
+        }
+        .requirements-list {
+            margin: 0;
+            padding-left: 18px;
+            display: grid;
+            gap: 8px;
+            color: var(--muted);
+        }
+        .requirements-list li {
+            line-height: 1.55;
         }
         .feature-card {
             padding: 24px;
@@ -645,6 +698,7 @@
                 </span>
             </a>
             <div class="topbar-actions">
+                <a class="button-ghost" href="{{ route('downloads') }}">Descargas</a>
                 <a class="button-ghost" href="{{ route('login') }}">Iniciar sesion</a>
                 <a class="button-secondary" href="{{ route('register') }}">Crear cuenta</a>
                 <a class="button" href="{{ route('register') }}">Probar Venpi</a>
@@ -772,89 +826,74 @@
         <section class="section" id="descargas">
             <div class="downloads-band">
                 <article class="downloads-copy">
-                    <h3>Descargas para cada entorno</h3>
-                    <p>Prepara una misma operacion para distintos equipos. Por ahora son accesos de referencia, pero la seccion ya queda lista para publicar instaladores reales cuando los tengas.</p>
+                    <h3>Instala Venpi segun el equipo</h3>
+                    <p>Usa una sola referencia pública para descargar instaladores de escritorio y enviar a tus clientes a App Store o Google Play cuando la app viva en tiendas.</p>
                     <div class="story-grid">
                         <div class="story-line">
                             <div class="story-index">A</div>
                             <div>
-                                <strong>Un mismo negocio, varias superficies</strong>
-                                <p class="micro-note">Windows, Mac, iOS y Android pueden vivir dentro de la misma historia operativa sin duplicar catalogos.</p>
+                                <strong>Desktop se instala, móvil se distribuye por tienda</strong>
+                                <p class="micro-note">Mac y Windows descargan instalador. iPhone, iPad y Android salen hacia su store oficial.</p>
                             </div>
                         </div>
                         <div class="story-line">
                             <div class="story-index">B</div>
                             <div>
-                                <strong>Listo para crecer por etapas</strong>
-                                <p class="micro-note">Puedes abrir esta banda como escaparate ahora y convertirla luego en centro real de descargas por plataforma.</p>
+                                <strong>Una sola URL para compartir</strong>
+                                <p class="micro-note">Puedes mandar a todos a <code>/descargas</code> y dejar que la plataforma correcta se explique sola.</p>
                             </div>
                         </div>
                     </div>
                 </article>
                 <article class="downloads-grid">
-                    <h3>Plataformas disponibles</h3>
-                    <p>Accesos marcados como proximamente para dejar clara la disponibilidad por sistema.</p>
+                    <div class="downloads-grid__intro">
+                        <h3>Plataformas disponibles</h3>
+                        <p>Publica aquí el estado real de cada plataforma: descarga directa para escritorio y redirección a tiendas para móvil.</p>
+                    </div>
                     <div class="downloads-list">
-                        <div class="download-card">
-                            <div class="download-card__head">
-                                <div class="download-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none"><path d="M3 5.5L10 4v7H3v-5.5Zm8 5.5V3.8l11-1.6V11H11Zm0 2h11v8.8L11 20.2V13ZM3 13h7v7L3 18.5V13Z" fill="currentColor"/></svg>
+                        @foreach (($downloads ?? []) as $download)
+                            <div class="download-card">
+                                <div class="download-card__head">
+                                    <div class="download-icon" aria-hidden="true">
+                                        @if ($download['icon'] === 'windows')
+                                            <svg viewBox="0 0 24 24" fill="none"><path d="M3 5.5L10 4v7H3v-5.5Zm8 5.5V3.8l11-1.6V11H11Zm0 2h11v8.8L11 20.2V13ZM3 13h7v7L3 18.5V13Z" fill="currentColor"/></svg>
+                                        @elseif ($download['icon'] === 'mac')
+                                            <svg viewBox="0 0 24 24" fill="none"><path d="M16.2 2.5c.9 1 1.4 2.2 1.5 3.6-1.3.1-2.6.7-3.4 1.7-.7.8-1.4 2-1.2 3.3 1.4.1 2.7-.6 3.5-1.6.8-1 1.2-2.2 1.2-3.4-.6-.1-1.1.1-1.6.4ZM12.8 7.8c1.5 0 2.8.9 3.6.9.7 0 2-.9 3.4-.8.7 0 2.6.3 3.9 2.2-2.8 1.6-2.3 5.6.6 6.8-.4 1.2-.9 2.3-1.7 3.3-1 1.3-2.1 2.7-3.8 2.7-1.6 0-2.1-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.8-1.3-3.8-2.6-2.1-2.8-3.6-8-.9-11 1.3-1.5 3-2.3 4.9-2.3Z" fill="currentColor"/></svg>
+                                        @elseif ($download['icon'] === 'ios')
+                                            <svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M10 5.5h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="18.2" r="1" fill="currentColor"/></svg>
+                                        @else
+                                            <svg viewBox="0 0 24 24" fill="none"><path d="M7.2 3h9.6l2.2 3.8v10.4l-2.2 3.8H7.2L5 17.2V6.8L7.2 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 8.4v7.2M14.5 8.4v7.2M9.5 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                        @endif
+                                    </div>
+                                    <div>
+                                        <strong>{{ $download['name'] }}</strong>
+                                        <span>{{ $download['description'] }}</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <strong>Windows</strong>
-                                    <span>Instalador de caja local y administracion de mostrador.</span>
+                                <p class="download-requirement">{{ $download['requirement'] }}</p>
+                                <div class="download-meta">
+                                    <span class="download-pill">{{ $download['availability'] }}</span>
+                                    @if ($download['url'])
+                                        <a class="download-link" href="{{ $download['url'] }}" target="_blank" rel="noopener noreferrer">
+                                            {{ $download['cta'] }}
+                                        </a>
+                                    @else
+                                        <span class="download-link download-link--disabled">{{ $download['cta'] }}</span>
+                                    @endif
                                 </div>
                             </div>
-                            <div class="download-meta">
-                                <span class="download-pill">Proximamente</span>
-                                <span class="download-link">Avisarme</span>
-                            </div>
+                        @endforeach
+                    </div>
+                    <div class="download-callout">
+                        <div>
+                            <strong>Qué debe pasar cuando compartes Venpi</strong>
+                            <p class="micro-note">Escritorio baja instalador. Móvil se instala desde su tienda. Así el usuario no cae en una ruta equivocada ni espera una auto-actualización que no existe.</p>
                         </div>
-                        <div class="download-card">
-                            <div class="download-card__head">
-                                <div class="download-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none"><path d="M16.2 2.5c.9 1 1.4 2.2 1.5 3.6-1.3.1-2.6.7-3.4 1.7-.7.8-1.4 2-1.2 3.3 1.4.1 2.7-.6 3.5-1.6.8-1 1.2-2.2 1.2-3.4-.6-.1-1.1.1-1.6.4ZM12.8 7.8c1.5 0 2.8.9 3.6.9.7 0 2-.9 3.4-.8.7 0 2.6.3 3.9 2.2-2.8 1.6-2.3 5.6.6 6.8-.4 1.2-.9 2.3-1.7 3.3-1 1.3-2.1 2.7-3.8 2.7-1.6 0-2.1-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.8-1.3-3.8-2.6-2.1-2.8-3.6-8-.9-11 1.3-1.5 3-2.3 4.9-2.3Z" fill="currentColor"/></svg>
-                                </div>
-                                <div>
-                                    <strong>Mac</strong>
-                                    <span>Aplicacion de escritorio para cajas locales y periféricos.</span>
-                                </div>
-                            </div>
-                            <div class="download-meta">
-                                <span class="download-pill">Proximamente</span>
-                                <span class="download-link">Avisarme</span>
-                            </div>
-                        </div>
-                        <div class="download-card">
-                            <div class="download-card__head">
-                                <div class="download-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M10 5.5h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="18.2" r="1" fill="currentColor"/></svg>
-                                </div>
-                                <div>
-                                    <strong>iOS</strong>
-                                    <span>Experiencia tactil para operar caja, catalogo y tickets desde tableta.</span>
-                                </div>
-                            </div>
-                            <div class="download-meta">
-                                <span class="download-pill">Proximamente</span>
-                                <span class="download-link">Avisarme</span>
-                            </div>
-                        </div>
-                        <div class="download-card">
-                            <div class="download-card__head">
-                                <div class="download-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none"><path d="M7.2 3h9.6l2.2 3.8v10.4l-2.2 3.8H7.2L5 17.2V6.8L7.2 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 8.4v7.2M14.5 8.4v7.2M9.5 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                                </div>
-                                <div>
-                                    <strong>Android</strong>
-                                    <span>Operacion movil para mostrador, apoyo en piso y consulta rapida.</span>
-                                </div>
-                            </div>
-                            <div class="download-meta">
-                                <span class="download-pill">Proximamente</span>
-                                <span class="download-link">Avisarme</span>
-                            </div>
-                        </div>
+                        <ul class="requirements-list">
+                            <li>Mac y Windows requieren instalación antes de abrir la caja local.</li>
+                            <li>iPhone, iPad y Android deben abrir App Store o Google Play para instalar Venpi.</li>
+                            <li>Si necesitas una plataforma todavía no publicada, puedes coordinarla por <a href="mailto:{{ $downloadsSupportEmail ?? 'hola@venpi.mx' }}">{{ $downloadsSupportEmail ?? 'hola@venpi.mx' }}</a>.</li>
+                        </ul>
                     </div>
                 </article>
             </div>
@@ -930,5 +969,12 @@
             </div>
         </section>
     </div>
+    @if (!empty($downloadsOnly))
+        <script>
+            window.addEventListener('load', () => {
+                document.getElementById('descargas')?.scrollIntoView({ behavior: 'auto', block: 'start' });
+            });
+        </script>
+    @endif
 </body>
 </html>
