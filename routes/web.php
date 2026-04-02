@@ -2323,6 +2323,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
         $user = Auth::user();
         $store = $resolveStoreForUser($user);
         $search = trim((string) $request->query('q', ''));
+        $includeUntracked = $request->boolean('include_untracked', true);
         $transferStoreOptions = Store::query()
             ->where('tenant_id', $user->tenant_id)
             ->where('id', '!=', $store->id)
@@ -2331,6 +2332,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
 
         $catalogQuery = DB::table('cloud_catalog_products')
             ->where('store_id', $store->id)
+            ->when(!$includeUntracked, fn ($query) => $query->where('track_inventory', true))
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
@@ -2348,10 +2350,14 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             return $item;
         });
 
+        $statsQuery = DB::table('cloud_catalog_products')
+            ->where('store_id', $store->id)
+            ->when(!$includeUntracked, fn ($query) => $query->where('track_inventory', true));
+
         $catalogStats = [
-            'total' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->count(),
-            'active' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->where('is_active', true)->count(),
-            'inactive' => DB::table('cloud_catalog_products')->where('store_id', $store->id)->where('is_active', false)->count(),
+            'total' => (clone $statsQuery)->count(),
+            'active' => (clone $statsQuery)->where('is_active', true)->count(),
+            'inactive' => (clone $statsQuery)->where('is_active', false)->count(),
             'lowStock' => DB::table('cloud_catalog_products')
                 ->where('store_id', $store->id)
                 ->where('is_active', true)
@@ -2368,6 +2374,7 @@ Route::middleware(['auth', 'cloud.surface'])->group(function () use ($resolveSto
             'catalogStats' => $catalogStats,
             'store' => $store,
             'search' => $search,
+            'includeUntracked' => $includeUntracked,
             'transferStoreOptions' => $transferStoreOptions,
         ]);
     })->name('catalog.index');

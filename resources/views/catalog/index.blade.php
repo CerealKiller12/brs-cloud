@@ -416,17 +416,17 @@
     <article class="catalog-summary-card">
         <div class="stat-label">Productos</div>
         <div class="stat-value">{{ $catalogStats['total'] }}</div>
-        <div class="stat-note">registrados en esta sucursal</div>
+        <div class="stat-note">{{ $includeUntracked ? 'registrados en esta sucursal' : 'con control de stock en esta sucursal' }}</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Activos</div>
         <div class="stat-value">{{ $catalogStats['active'] }}</div>
-        <div class="stat-note">visibles para tus cajas</div>
+        <div class="stat-note">{{ $includeUntracked ? 'visibles para tus cajas' : 'activos con control de stock' }}</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Pausados</div>
         <div class="stat-value">{{ $catalogStats['inactive'] }}</div>
-        <div class="stat-note">fuera de operacion temporalmente</div>
+        <div class="stat-note">{{ $includeUntracked ? 'fuera de operacion temporalmente' : 'pausados con control de stock' }}</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Stock bajo</div>
@@ -597,11 +597,24 @@
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false">
+                <label class="catalog-toggle-control catalog-search-toggle">
+                    <input type="hidden" name="include_untracked" value="0">
+                    <input
+                        name="include_untracked"
+                        type="checkbox"
+                        value="1"
+                        {{ $includeUntracked ? 'checked' : '' }}
+                        data-catalog-include-untracked>
+                    <div class="catalog-toggle-copy">
+                        <strong>Contar productos sin control de stock</strong>
+                        <span>Apagalo para revisar solo productos que si mueven inventario.</span>
+                    </div>
+                </label>
                 <div class="catalog-search-actions">
                     <button class="catalog-action secondary compact" type="submit">Buscar</button>
                     <button class="catalog-action secondary compact" type="button" data-catalog-clear-search>Limpiar</button>
                 </div>
-                <span class="muted catalog-search-meta">Busca en todo el catalogo compartido, no solo en esta pagina.</span>
+                <span class="muted catalog-search-meta">Busca en todo el catalogo compartido y ajusta si quieres contar o no los productos sin stock control.</span>
             </form>
         </div>
 
@@ -875,6 +888,7 @@
     const liveStatus = root.querySelector('[data-live-status]');
     const searchForm = root.querySelector('[data-catalog-search-form]');
     const filterInput = searchForm?.querySelector('[data-catalog-filter-input]') ?? null;
+    const includeUntrackedInput = searchForm?.querySelector('[data-catalog-include-untracked]') ?? null;
     const clearSearchButton = searchForm?.querySelector('[data-catalog-clear-search]') ?? null;
     const resultsScope = root.querySelector('[data-catalog-results-scope]');
     const modal = document.querySelector('[data-catalog-modal]');
@@ -1032,6 +1046,14 @@
             }
         }
 
+        if (Object.prototype.hasOwnProperty.call(overrides, 'includeUntracked')) {
+            if (overrides.includeUntracked) {
+                url.searchParams.delete('include_untracked');
+            } else {
+                url.searchParams.set('include_untracked', '0');
+            }
+        }
+
         return url;
     };
 
@@ -1156,10 +1178,12 @@
 
     const submitCatalogSearch = () => {
         const query = filterInput?.value.trim() || '';
+        const includeUntracked = !!includeUntrackedInput?.checked;
 
         return refreshCatalogView(buildCatalogUrl({
             q: query,
             page: 0,
+            includeUntracked,
         }), {
             updateMeta: false,
             statusText: query !== ''
@@ -1408,6 +1432,16 @@
             searchTimer = window.setTimeout(() => {
                 void submitCatalogSearch();
             }, 240);
+        });
+    }
+
+    if (includeUntrackedInput) {
+        includeUntrackedInput.addEventListener('change', () => {
+            if (searchTimer) {
+                window.clearTimeout(searchTimer);
+            }
+
+            void submitCatalogSearch();
         });
     }
 
