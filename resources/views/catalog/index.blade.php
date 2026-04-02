@@ -359,6 +359,14 @@
         color: #9d4635;
         border-color: #f6c9bf;
     }
+    .catalog-stock-muted {
+        font-weight: 700;
+        color: var(--text);
+    }
+    .catalog-stock-note {
+        color: var(--muted);
+        font-size: 13px;
+    }
     @media (max-width: 1180px) {
         .catalog-summary,
         .catalog-store-card,
@@ -416,17 +424,17 @@
     <article class="catalog-summary-card">
         <div class="stat-label">Productos</div>
         <div class="stat-value">{{ $catalogStats['total'] }}</div>
-        <div class="stat-note">{{ $includeUntracked ? 'registrados en esta sucursal' : 'con control de stock en esta sucursal' }}</div>
+        <div class="stat-note">registrados en esta sucursal</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Activos</div>
         <div class="stat-value">{{ $catalogStats['active'] }}</div>
-        <div class="stat-note">{{ $includeUntracked ? 'visibles para tus cajas' : 'activos con control de stock' }}</div>
+        <div class="stat-note">visibles para tus cajas</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Pausados</div>
         <div class="stat-value">{{ $catalogStats['inactive'] }}</div>
-        <div class="stat-note">{{ $includeUntracked ? 'fuera de operacion temporalmente' : 'pausados con control de stock' }}</div>
+        <div class="stat-note">fuera de operacion temporalmente</div>
     </article>
     <article class="catalog-summary-card">
         <div class="stat-label">Stock bajo</div>
@@ -518,8 +526,8 @@
                             <label class="catalog-toggle-control" for="track_inventory">
                                 <input id="track_inventory" name="track_inventory" type="checkbox" value="1" {{ old('track_inventory', true) ? 'checked' : '' }}>
                                 <div class="catalog-toggle-copy">
-                                    <strong>Controlar inventario desde la nube</strong>
-                                    <span>Activalo cuando quieras que existencias y alertas de reorden se reflejen entre cajas.</span>
+                                    <strong>Mostrar stock y controlarlo desde la nube</strong>
+                                    <span>Activalo cuando quieras que existencias, descuentos y alertas de reorden se reflejen entre cajas.</span>
                                 </div>
                             </label>
 
@@ -597,24 +605,11 @@
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false">
-                <label class="catalog-toggle-control catalog-search-toggle">
-                    <input type="hidden" name="include_untracked" value="0">
-                    <input
-                        name="include_untracked"
-                        type="checkbox"
-                        value="1"
-                        {{ $includeUntracked ? 'checked' : '' }}
-                        data-catalog-include-untracked>
-                    <div class="catalog-toggle-copy">
-                        <strong>Contar productos sin control de stock</strong>
-                        <span>Apagalo para revisar solo productos que si mueven inventario.</span>
-                    </div>
-                </label>
                 <div class="catalog-search-actions">
                     <button class="catalog-action secondary compact" type="submit">Buscar</button>
                     <button class="catalog-action secondary compact" type="button" data-catalog-clear-search>Limpiar</button>
                 </div>
-                <span class="muted catalog-search-meta">Busca en todo el catalogo compartido y ajusta si quieres contar o no los productos sin stock control.</span>
+                <span class="muted catalog-search-meta">Busca en todo el catalogo compartido. Cada producto decide si muestra stock o no.</span>
             </form>
         </div>
 
@@ -685,18 +680,23 @@
                                 @endif
                             </td>
                             <td>
-                                <input
-                                    class="catalog-inline-input compact"
-                                    form="{{ $inlineFormId }}"
-                                    name="stock_on_hand"
-                                    type="number"
-                                    min="0"
-                                    value="{{ $item->stock_on_hand }}"
-                                    data-catalog-inline-input
-                                    aria-label="Stock disponible">
                                 @if ($item->track_inventory)
+                                    <input
+                                        class="catalog-inline-input compact"
+                                        form="{{ $inlineFormId }}"
+                                        name="stock_on_hand"
+                                        type="number"
+                                        min="0"
+                                        value="{{ $item->stock_on_hand }}"
+                                        data-catalog-inline-input
+                                        aria-label="Stock disponible">
                                     <div class="catalog-meta">
                                         <span class="pill {{ $isLowStock ? 'danger stock-pill low' : '' }}">Reorden {{ $item->reorder_point }}</span>
+                                    </div>
+                                @else
+                                    <div class="catalog-meta">
+                                        <strong class="catalog-stock-muted">No visible</strong>
+                                        <span class="catalog-stock-note">Producto sin control de stock</span>
                                     </div>
                                 @endif
                             </td>
@@ -709,6 +709,9 @@
                                     <input type="hidden" name="sku" value="{{ $item->sku }}">
                                     <input type="hidden" name="barcode" value="{{ $item->barcode }}">
                                     <input type="hidden" name="cost" value="{{ $costValue }}">
+                                    @unless ($item->track_inventory)
+                                        <input type="hidden" name="stock_on_hand" value="{{ $item->stock_on_hand }}">
+                                    @endunless
                                     <input type="hidden" name="reorder_point" value="{{ $item->reorder_point }}">
                                     <input type="hidden" name="track_inventory" value="{{ $item->track_inventory ? 1 : 0 }}">
                                     <input type="hidden" name="is_active" value="{{ $item->is_active ? 1 : 0 }}">
@@ -818,7 +821,7 @@
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <input id="modal_track_inventory" name="track_inventory" type="checkbox" value="1" style="width: auto;">
-                <label for="modal_track_inventory" style="margin: 0;">Controlar inventario desde la nube</label>
+                <label for="modal_track_inventory" style="margin: 0;">Mostrar stock y controlarlo desde la nube</label>
             </div>
             <div class="surface" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <input id="modal_is_active" name="is_active" type="checkbox" value="1" style="width: auto;">
@@ -888,7 +891,6 @@
     const liveStatus = root.querySelector('[data-live-status]');
     const searchForm = root.querySelector('[data-catalog-search-form]');
     const filterInput = searchForm?.querySelector('[data-catalog-filter-input]') ?? null;
-    const includeUntrackedInput = searchForm?.querySelector('[data-catalog-include-untracked]') ?? null;
     const clearSearchButton = searchForm?.querySelector('[data-catalog-clear-search]') ?? null;
     const resultsScope = root.querySelector('[data-catalog-results-scope]');
     const modal = document.querySelector('[data-catalog-modal]');
@@ -1046,14 +1048,6 @@
             }
         }
 
-        if (Object.prototype.hasOwnProperty.call(overrides, 'includeUntracked')) {
-            if (overrides.includeUntracked) {
-                url.searchParams.delete('include_untracked');
-            } else {
-                url.searchParams.set('include_untracked', '0');
-            }
-        }
-
         return url;
     };
 
@@ -1178,12 +1172,10 @@
 
     const submitCatalogSearch = () => {
         const query = filterInput?.value.trim() || '';
-        const includeUntracked = !!includeUntrackedInput?.checked;
 
         return refreshCatalogView(buildCatalogUrl({
             q: query,
             page: 0,
-            includeUntracked,
         }), {
             updateMeta: false,
             statusText: query !== ''
@@ -1384,14 +1376,16 @@
         const stockInput = row.querySelector('[name="stock_on_hand"][data-catalog-inline-input]');
         const saveButton = row.querySelector('[data-catalog-inline-save]');
 
-        if (!nameInput || !priceInput || !stockInput || !saveButton) {
+        if (!nameInput || !priceInput || !saveButton) {
             return;
         }
 
         const isDirty =
             normalizeValue(nameInput.value, 'text') !== normalizeValue(row.dataset.name, 'text') ||
             normalizeValue(priceInput.value, 'number') !== normalizeValue(row.dataset.price, 'number') ||
-            normalizeValue(stockInput.value, 'number') !== normalizeValue(row.dataset.stock, 'number');
+            (stockInput
+                ? normalizeValue(stockInput.value, 'number') !== normalizeValue(row.dataset.stock, 'number')
+                : false);
 
         saveButton.classList.toggle('is-hidden', !isDirty);
     };
@@ -1432,16 +1426,6 @@
             searchTimer = window.setTimeout(() => {
                 void submitCatalogSearch();
             }, 240);
-        });
-    }
-
-    if (includeUntrackedInput) {
-        includeUntrackedInput.addEventListener('change', () => {
-            if (searchTimer) {
-                window.clearTimeout(searchTimer);
-            }
-
-            void submitCatalogSearch();
         });
     }
 
