@@ -461,6 +461,8 @@ $buildEffectiveCloudSales = function ($events, string $storeTimezone, $deviceMet
                 'device_id' => $event->device_id,
                 'folio' => (string) ($effectiveSalePayload['folio'] ?? $payload['folio'] ?? data_get($payload, 'sale.folio', $saleId)),
                 'origin_label' => ($effectiveSalePayload['originLabel'] ?? $payload['originLabel'] ?? data_get($payload, 'sale.originLabel')) ?: null,
+                'origin_type' => ($effectiveSalePayload['originType'] ?? $payload['originType'] ?? data_get($payload, 'sale.originType')) ?: null,
+                'origin_table_id' => ($effectiveSalePayload['originTableId'] ?? $payload['originTableId'] ?? data_get($payload, 'sale.originTableId')) ?: null,
                 'occurred_at' => $occurredAt,
                 'synced_at' => $returnMeta && $returnMeta['receivedAt']
                     ? $returnMeta['receivedAt']->toIso8601String()
@@ -754,6 +756,8 @@ $buildCloudRecentSalesForStore = function (int $tenantId, int $storeId, ?string 
                 'id' => $sale->id,
                 'folio' => $sale->folio,
                 'originLabel' => $sale->origin_label,
+                'originType' => $sale->origin_type,
+                'originTableId' => $sale->origin_table_id,
                 'paymentMethod' => $sale->payment_method,
                 'totalCents' => $sale->total_cents,
                 'createdAt' => $sale->occurred_at->toIso8601String(),
@@ -840,6 +844,8 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
         'id' => $sale->id,
         'folio' => $sale->folio,
         'originLabel' => $sale->origin_label,
+        'originType' => $sale->origin_type,
+        'originTableId' => $sale->origin_table_id,
         'cashierId' => $sale->cashier_id,
         'cashierName' => $sale->cashier_name,
         'paymentMethod' => $sale->payment_method,
@@ -855,6 +861,56 @@ $buildCloudSaleDetailForStore = function (int $tenantId, int $storeId, string $s
         'changeDueCents' => $sale->change_due_cents,
         'items' => $detailItems,
         'returnInfo' => $sale->return_info,
+    ];
+};
+
+$buildCloudRestaurantStateForStore = function (int $tenantId, int $storeId) {
+    $rows = DB::table('restaurant_table_states')
+        ->where('tenant_id', $tenantId)
+        ->where('store_id', $storeId)
+        ->orderBy('table_id')
+        ->get([
+            'table_id',
+            'table_label',
+            'version',
+            'cart_json',
+            'guest_count',
+            'notes',
+            'opened_at',
+            'last_device_id',
+            'updated_at',
+        ]);
+
+    $tables = $rows->map(function (object $row) {
+        $tableId = trim((string) $row->table_id);
+        $tableNumber = preg_match('/^table-(\d+)$/', $tableId, $matches) ? (int) $matches[1] : null;
+        $defaultLabel = $tableNumber ? "Mesa {$tableNumber}" : $tableId;
+        $cart = json_decode((string) ($row->cart_json ?? '[]'), true);
+
+        return [
+            'id' => $tableId,
+            'label' => trim((string) ($row->table_label ?? '')) !== '' ? (string) $row->table_label : $defaultLabel,
+            'cart' => is_array($cart) ? $cart : [],
+            'version' => max(0, (int) ($row->version ?? 0)),
+            'pendingSync' => false,
+            'guestCount' => $row->guest_count !== null ? max(1, (int) $row->guest_count) : null,
+            'notes' => trim((string) ($row->notes ?? '')),
+            'openedAt' => $row->opened_at ? Carbon::parse($row->opened_at)->toIso8601String() : null,
+            'lastDeviceId' => trim((string) ($row->last_device_id ?? '')) !== '' ? (string) $row->last_device_id : null,
+            'updatedAt' => $row->updated_at ? Carbon::parse($row->updated_at)->toIso8601String() : null,
+        ];
+    })->values()->all();
+
+    $syncedAt = $rows
+        ->map(fn (object $row) => $row->updated_at ? Carbon::parse($row->updated_at)->toIso8601String() : null)
+        ->filter()
+        ->sortDesc()
+        ->values()
+        ->first();
+
+    return [
+        'tables' => $tables,
+        'syncedAt' => $syncedAt,
     ];
 };
 
@@ -1468,6 +1524,14 @@ Route::get('/cloud/catalog/changes', function (Request $request) use ($resolveSt
     ]);
 })->middleware('auth:sanctum');
 
+Route::get('/cloud/restaurant/state', function (Request $request) use ($resolveStoreContext, $buildCloudRestaurantStateForStore) {
+    $store = $resolveStoreContext($request);
+
+    return response()->json(
+        $buildCloudRestaurantStateForStore((int) $store->tenant_id, (int) $store->store_row_id)
+    );
+});
+
 Route::get('/cloud/events/stream', function (Request $request) use ($resolveStoreContext, $streamCatalogVersionEvents) {
     $store = $resolveStoreContext($request);
 
@@ -1676,6 +1740,82 @@ Route::post('/cloud/sync/events', function (Request $request) use ($resolveStore
                         ->where('id', $existingProduct->id)
                         ->delete();
                 }
+            }
+
+            if ($eventType === 'restaurant.account.upserted') {
+                $tableId = trim((string) ($eventPayload['tableId'] ?? ''));
+
+                if ($tableId === '') {
+                    throw new InvalidArgumentException('Venpi Cloud no recibio una mesa valida para sincronizar.');
+                }
+
+                $tableNumber = preg_match('/^table-(\d+)$/', $tableId, $tableMatches) ? (int) $tableMatches[1] : null;
+                $defaultTableLabel = $tableNumber ? "Mesa {$tableNumber}" : $tableId;
+                $tableLabel = trim((string) ($eventPayload['tableLabel'] ?? '')) ?: $defaultTableLabel;
+                $existingTableState = DB::table('restaurant_table_states')
+                    ->where('store_id', $store->store_row_id)
+                    ->where('table_id', $tableId)
+                    ->first();
+                $baseVersion = array_key_exists('baseVersion', $eventPayload) && $eventPayload['baseVersion'] !== null
+                    ? max(0, (int) round($eventPayload['baseVersion']))
+                    : 0;
+                $currentVersion = $existingTableState ? max(0, (int) $existingTableState->version) : 0;
+
+                if ($baseVersion !== $currentVersion) {
+                    $message = "La cuenta de {$tableLabel} cambio en otra caja. Recarga mesas antes de seguir editando.";
+
+                    DB::table('sync_events')
+                        ->where('store_id', $store->store_row_id)
+                        ->where('event_id', $event['event_id'])
+                        ->update([
+                            'apply_error' => $message,
+                            'updated_at' => now(),
+                        ]);
+
+                    $conflicts[] = [
+                        'eventId' => $event['event_id'],
+                        'message' => $message,
+                        'currentCatalogVersion' => null,
+                    ];
+                    continue;
+                }
+
+                $cart = is_array($eventPayload['cart'] ?? null) ? array_values($eventPayload['cart']) : [];
+                $nextVersion = $currentVersion + 1;
+                $guestCount = array_key_exists('guestCount', $eventPayload) && $eventPayload['guestCount'] !== null
+                    ? max(1, (int) round($eventPayload['guestCount']))
+                    : null;
+                $notes = trim((string) ($eventPayload['notes'] ?? ''));
+                $openedAt = null;
+
+                if (count($cart) > 0) {
+                    try {
+                        $openedAt = !empty($eventPayload['openedAt'])
+                            ? Carbon::parse($eventPayload['openedAt'])
+                            : ($existingTableState?->opened_at ? Carbon::parse($existingTableState->opened_at) : now());
+                    } catch (\Throwable) {
+                        $openedAt = $existingTableState?->opened_at ? Carbon::parse($existingTableState->opened_at) : now();
+                    }
+                }
+
+                DB::table('restaurant_table_states')->updateOrInsert(
+                    [
+                        'store_id' => $store->store_row_id,
+                        'table_id' => $tableId,
+                    ],
+                    [
+                        'tenant_id' => $store->tenant_id,
+                        'table_label' => $tableLabel,
+                        'version' => $nextVersion,
+                        'cart_json' => json_encode($cart, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                        'guest_count' => count($cart) > 0 ? $guestCount : null,
+                        'notes' => count($cart) > 0 ? $notes : '',
+                        'opened_at' => $openedAt,
+                        'last_device_id' => $payload['device_id'],
+                        'updated_at' => now(),
+                        'created_at' => DB::raw('coalesce(created_at, CURRENT_TIMESTAMP)'),
+                    ]
+                );
             }
 
             $saleItems = $eventPayload['items'] ?? $eventPayload['sale']['items'] ?? null;
